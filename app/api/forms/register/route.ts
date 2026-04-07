@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import nodemailer from "nodemailer";
+import { createDecipheriv, scryptSync } from "crypto";
 
 type CourseSelection = "DM" | "HR" | null;
 type ReviewStatus = "approved" | "under_review";
@@ -29,6 +31,206 @@ function getRegistrationNumber(course: CourseSelection, sequenceNumber: number):
   }
 
   return `TQLGEN${sequenceNumber}`;
+}
+
+function isEncryptedSmtpPassword(value: string): boolean {
+  return value.startsWith("enc:v1:");
+}
+
+function decryptSmtpPassword(value: string): string {
+  if (!isEncryptedSmtpPassword(value)) {
+    return value;
+  }
+
+  const parts = value.split(":");
+  if (parts.length !== 5) {
+    throw new Error("Invalid encrypted SMTP password format.");
+  }
+
+  const secret = (process.env.SMTP_SETTINGS_SECRET || process.env.ADMIN_SESSION_SECRET || "").trim();
+  if (!secret) {
+    throw new Error("SMTP secret is not configured.");
+  }
+
+  const [, , ivPart, tagPart, encryptedPart] = parts;
+  const iv = Buffer.from(ivPart, "base64url");
+  const authTag = Buffer.from(tagPart, "base64url");
+  const encrypted = Buffer.from(encryptedPart, "base64url");
+  const key = scryptSync(secret, "tq-smtp-password-salt", 32);
+  const decipher = createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(authTag);
+  const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+  return decrypted.toString("utf8");
+}
+
+function buildRegistrationCongratsHtml({
+  studentName,
+  regNo,
+  courseSelected,
+  nextBatchStartDate,
+}: {
+  studentName: string;
+  regNo: string;
+  courseSelected: CourseSelection;
+  nextBatchStartDate: string | null;
+}): string {
+  const courseLabel =
+    courseSelected === "HR" ? "Human Resource (HR)" : courseSelected === "DM" ? "Digital Marketing" : "General";
+  const nextBatchLabel = nextBatchStartDate
+    ? new Date(nextBatchStartDate).toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+    : "To be announced";
+
+  return `<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#eef2ff;font-family:Arial,sans-serif;color:#0f172a;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef2ff;padding:24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="640" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #c7d2fe;">
+            <tr>
+              <td style="background:linear-gradient(135deg,#221bff,#2b24ff,#3f37ff);padding:28px;color:#ffffff;">
+                <div style="text-align:right;margin-bottom:8px;">
+                  <img
+                    src="https://truequestlearning.com/logo-emailer.png"
+                    alt="TrueQuest Learning Logo"
+                    width="56"
+                    height="56"
+                    style="display:inline-block;"
+                  />
+                </div>
+                <h1 style="margin:0;font-size:26px;line-height:1.3;">Congratulations! Registration Confirmed</h1>
+                <p style="margin:10px 0 0 0;font-size:14px;line-height:1.6;opacity:.94;">
+                  Welcome to TrueQuest Learning. Your admission is successfully registered.
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 28px;">
+                <div style="margin:0 0 14px 0;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+                  <img
+                    src="https://truequestlearning.com/banner-emailer.jpg"
+                    alt="TrueQuest Learning Banner"
+                    width="584"
+                    style="display:block;width:100%;height:auto;"
+                  />
+                </div>
+                <p style="margin:0 0 12px 0;font-size:14px;line-height:1.7;">Hi ${studentName},</p>
+                <p style="margin:0 0 14px 0;font-size:14px;line-height:1.7;">
+                  Your registration has been completed successfully.
+                </p>
+                <div style="margin:0 0 16px 0;">
+                  <p style="margin:0 0 6px 0;font-size:13px;color:#334155;font-weight:700;">Registration Code:</p>
+                  <div
+                    style="text-align:center;font-size:48px;line-height:1.1;font-weight:800;letter-spacing:3px;color:#2ea85f;"
+                  >
+                    ${regNo}
+                  </div>
+                </div>
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 16px 0;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;">
+                  <tr>
+                    <td style="padding:14px;">
+                      <div style="font-size:13px;color:#334155;line-height:1.8;">
+                        <strong>Course:</strong> ${courseLabel}<br/>
+                        <strong>Next Batch Start:</strong> ${nextBatchLabel}
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+                <p style="margin:0 0 12px 0;font-size:13px;line-height:1.8;color:#334155;">
+                  For more details, visit:
+                  <a href="https://truequestlearning.com" style="color:#2b24ff;text-decoration:underline;">truequestlearning.com</a>
+                </p>
+                <p style="margin:0 0 12px 0;font-size:13px;line-height:1.8;color:#334155;">
+                  Contact: +91 97470 03913 / +91 97470 03918 | Sulthan Bathery, Wayanad
+                </p>
+                <p style="margin:0 0 14px 0;font-size:13px;line-height:1.8;color:#334155;">
+                  📸 <a href="https://www.instagram.com/truequestlearning" style="color:#2b24ff;text-decoration:underline;">Instagram</a> |
+                  👍 <a href="https://www.facebook.com/truequestlearning" style="color:#2b24ff;text-decoration:underline;">Facebook</a> |
+                  💼 <a href="https://www.linkedin.com/company/truequestlearning/" style="color:#2b24ff;text-decoration:underline;">LinkedIn</a> |
+                  ▶️ <a href="https://youtube.com/@truequestlearning?si=v8rq-EW8KFl4JGY2" style="color:#2b24ff;text-decoration:underline;">YouTube</a>
+                </p>
+                <p style="margin:16px 0 0 0;font-size:14px;line-height:1.7;">
+                  Regards,<br/><strong>Team TrueQuest Learning</strong>
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
+async function sendRegistrationCongratsEmail(params: {
+  studentName: string;
+  emailId: string;
+  regNo: string;
+  courseSelected: CourseSelection;
+}): Promise<void> {
+  const smtpRows = (await sql`
+    SELECT host, port, username, password
+    FROM smtp_settings
+    WHERE id = 1
+    LIMIT 1
+  `) as Array<{
+    host: string | null;
+    port: string | null;
+    username: string | null;
+    password: string | null;
+  }>;
+
+  const customSmtp = smtpRows[0];
+  const customPassword = customSmtp?.password?.trim()
+    ? decryptSmtpPassword(customSmtp.password.trim())
+    : "";
+  const hasCustom =
+    Boolean(customSmtp?.host?.trim()) &&
+    Boolean(customSmtp?.port?.trim()) &&
+    Boolean(customSmtp?.username?.trim()) &&
+    Boolean(customPassword);
+
+  const smtpHost = hasCustom ? customSmtp?.host?.trim() || "" : process.env.SMTP_HOST?.trim() || "";
+  const smtpPortRaw = hasCustom ? customSmtp?.port?.trim() || "" : process.env.SMTP_PORT?.trim() || "";
+  const smtpUser = hasCustom ? customSmtp?.username?.trim() || "" : process.env.SMTP_USER?.trim() || "";
+  const smtpPassword = hasCustom ? customPassword : process.env.SMTP_PASSWORD?.trim() || "";
+  const smtpPort = Number(smtpPortRaw);
+
+  if (!smtpHost || !smtpPort || !smtpUser || !smtpPassword) {
+    throw new Error("SMTP is not configured.");
+  }
+
+  const adminSettingsRows = (await sql`
+    SELECT next_batch_start_date
+    FROM admin_settings
+    WHERE id = 1
+    LIMIT 1
+  `) as Array<{ next_batch_start_date: string | null }>;
+  const nextBatchStartDate = adminSettingsRows[0]?.next_batch_start_date || null;
+
+  const transporter = nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpPort === 465,
+    auth: { user: smtpUser, pass: smtpPassword },
+  });
+
+  await transporter.sendMail({
+    from: smtpUser,
+    to: params.emailId,
+    subject: `TrueQuest Learning | Registration Confirmed (${params.regNo})`,
+    text: `Hi ${params.studentName}, your registration is confirmed. Registration Code: ${params.regNo}.`,
+    html: buildRegistrationCongratsHtml({
+      studentName: params.studentName,
+      regNo: params.regNo,
+      courseSelected: params.courseSelected,
+      nextBatchStartDate,
+    }),
+  });
 }
 
 async function ensureTables() {
@@ -79,6 +281,25 @@ async function ensureTables() {
   await sql`
     CREATE UNIQUE INDEX IF NOT EXISTS student_registrations_whatsapp_number_idx
     ON student_registrations (whatsapp_number)
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS smtp_settings (
+      id integer PRIMARY KEY,
+      host text,
+      port text,
+      username text,
+      password text,
+      updated_at timestamptz DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS admin_settings (
+      id integer PRIMARY KEY,
+      next_batch_start_date date,
+      updated_at timestamptz DEFAULT now()
+    )
   `;
 }
 
@@ -296,6 +517,17 @@ export async function POST(req: NextRequest) {
     }
 
     if (isAllowlisted && regNo) {
+      try {
+        await sendRegistrationCongratsEmail({
+          studentName: name,
+          emailId,
+          regNo,
+          courseSelected,
+        });
+      } catch (mailError) {
+        console.error("Registration email send failed:", mailError);
+      }
+
       return NextResponse.json(
         { status: "registered", regNo, studentName: name },
         { status: 200 },
