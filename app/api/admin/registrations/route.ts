@@ -273,8 +273,26 @@ export async function GET(req: NextRequest) {
       created_at: string;
     }>;
 
+    await sql`
+      CREATE TABLE IF NOT EXISTS notify_emails (
+        id serial PRIMARY KEY,
+        email text UNIQUE NOT NULL,
+        created_at timestamptz DEFAULT now()
+      )
+    `;
+
+    const notificationRequestedUsers = (await sql`
+      SELECT id, email, created_at
+      FROM notify_emails
+      ORDER BY created_at DESC
+    `) as Array<{
+      id: number;
+      email: string;
+      created_at: string;
+    }>;
+
     return NextResponse.json(
-      { registrations, allowlist, transactions, brochureRequests },
+      { registrations, allowlist, transactions, brochureRequests, notificationRequestedUsers },
       { status: 200 },
     );
   } catch (error) {

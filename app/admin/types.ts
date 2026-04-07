@@ -62,3 +62,9 @@ export type BrochureRequestRecord = {
   offer_type: "HR" | "DIGITAL_MARKETING";
   created_at: string;
 };
+
+export type NotificationRequestRecord = {
+  id: number;
+  email: string;
+  created_at: string;
+};

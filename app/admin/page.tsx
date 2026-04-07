@@ -11,6 +11,7 @@ import type {
   AllowlistRecord,
   BrochureRequestRecord,
   FeeTransaction,
+  NotificationRequestRecord,
   RegistrationRecord,
 } from "./types";
 import {
@@ -20,6 +21,44 @@ import {
   getErrorMessage,
   toDateInputValue,
 } from "./utils";
+
+function PaginationControls({
+  page,
+  totalPages,
+  onPrevious,
+  onNext,
+}: {
+  page: number;
+  totalPages: number;
+  onPrevious: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
+      <p>
+        Page {page} of {totalPages}
+      </p>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={page === 1}
+          onClick={onPrevious}
+          className="rounded-lg border border-slate-200 px-3 py-1.5 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Previous
+        </button>
+        <button
+          type="button"
+          disabled={page === totalPages}
+          onClick={onNext}
+          className="rounded-lg border border-slate-200 px-3 py-1.5 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function FormsAdminPage() {
   const [username, setUsername] = useState("");
@@ -31,6 +70,9 @@ export default function FormsAdminPage() {
   const [allowlist, setAllowlist] = useState<AllowlistRecord[]>([]);
   const [transactions, setTransactions] = useState<FeeTransaction[]>([]);
   const [brochureRequests, setBrochureRequests] = useState<BrochureRequestRecord[]>([]);
+  const [notificationRequestedUsers, setNotificationRequestedUsers] = useState<
+    NotificationRequestRecord[]
+  >([]);
   const [isSaving, setIsSaving] = useState(false);
   const [allowName, setAllowName] = useState("");
   const [allowPhone, setAllowPhone] = useState("");
@@ -39,8 +81,26 @@ export default function FormsAdminPage() {
   const [editingRegId, setEditingRegId] = useState<number | null>(null);
   const [editingRegData, setEditingRegData] = useState<Partial<RegistrationRecord>>({});
   const [isRegistrationEditModalOpen, setIsRegistrationEditModalOpen] = useState(false);
+  const [isRegistrationDetailsModalOpen, setIsRegistrationDetailsModalOpen] = useState(false);
+  const [selectedRegistrationDetails, setSelectedRegistrationDetails] =
+    useState<RegistrationRecord | null>(null);
   const [allowlistPage, setAllowlistPage] = useState(1);
   const [registrationsPage, setRegistrationsPage] = useState(1);
+  const [registrationSearchTerm, setRegistrationSearchTerm] = useState("");
+  const [registrationCourseFilter, setRegistrationCourseFilter] = useState<"all" | "HR" | "DM">("all");
+  const [registrationReviewFilter, setRegistrationReviewFilter] = useState<
+    "all" | "approved" | "under_review"
+  >("all");
+  const [registrationPaymentFilter, setRegistrationPaymentFilter] = useState<
+    "all" | "fully_paid" | "pending_fee"
+  >("all");
+  const [hrBrochurePage, setHrBrochurePage] = useState(1);
+  const [dmBrochurePage, setDmBrochurePage] = useState(1);
+  const [notificationRequestedPage, setNotificationRequestedPage] = useState(1);
+  const [feesPage, setFeesPage] = useState(1);
+  const [paymentRemindersPage, setPaymentRemindersPage] = useState(1);
+  const [transactionsPage, setTransactionsPage] = useState(1);
+  const [paymentHistoryPage, setPaymentHistoryPage] = useState(1);
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isFeeModalOpen, setIsFeeModalOpen] = useState(false);
@@ -66,6 +126,7 @@ export default function FormsAdminPage() {
     setAllowlist(data.allowlist || []);
     setTransactions(data.transactions || []);
     setBrochureRequests(data.brochureRequests || []);
+    setNotificationRequestedUsers(data.notificationRequestedUsers || []);
     setIsAuthenticated(true);
   }
 
@@ -236,6 +297,16 @@ export default function FormsAdminPage() {
     setIsRegistrationEditModalOpen(false);
     setEditingRegId(null);
     setEditingRegData({});
+  }
+
+  function openRegistrationDetails(registration: RegistrationRecord) {
+    setSelectedRegistrationDetails(registration);
+    setIsRegistrationDetailsModalOpen(true);
+  }
+
+  function closeRegistrationDetails() {
+    setIsRegistrationDetailsModalOpen(false);
+    setSelectedRegistrationDetails(null);
   }
 
   async function handleRegistrationSave() {
@@ -443,6 +514,12 @@ export default function FormsAdminPage() {
 
   const allowlistPageSize = 8;
   const registrationsPageSize = 10;
+  const brochurePageSize = 8;
+  const notificationRequestsPageSize = 10;
+  const feeRowsPageSize = 10;
+  const remindersPageSize = 10;
+  const transactionsPageSize = 12;
+  const paymentHistoryPageSize = 8;
 
   const approvedRegistrationsCount = registrations.filter(
     (registration) => registration.review_status === "approved",
@@ -451,6 +528,22 @@ export default function FormsAdminPage() {
   const totalFeeAmount = registrations.reduce((sum, row) => sum + (row.total_fee || 0), 0);
   const totalPaidAmount = registrations.reduce((sum, row) => sum + (row.total_paid || 0), 0);
   const totalPendingAmount = registrations.reduce((sum, row) => sum + (row.pending_fee || 0), 0);
+  const approvalRate = registrations.length
+    ? Math.round((approvedRegistrationsCount / registrations.length) * 100)
+    : 0;
+  const collectionRate = totalFeeAmount ? Math.round((totalPaidAmount / totalFeeAmount) * 100) : 0;
+  const underReviewRate = registrations.length
+    ? Math.round((underReviewRegistrationsCount / registrations.length) * 100)
+    : 0;
+  const hrRegistrationsCount = registrations.filter((row) => row.course_selected === "HR").length;
+  const dmRegistrationsCount = registrations.filter((row) => row.course_selected === "DM").length;
+  const recentRegistrations = [...registrations]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 5);
+  const highestPendingRegistrations = [...registrations]
+    .filter((row) => row.pending_fee > 0)
+    .sort((a, b) => b.pending_fee - a.pending_fee)
+    .slice(0, 5);
   const pendingReminderList = registrations
     .filter((row) => row.pending_fee > 0)
     .sort((a, b) => b.pending_fee - a.pending_fee);
@@ -458,16 +551,79 @@ export default function FormsAdminPage() {
   const dmBrochureRequests = brochureRequests.filter(
     (request) => request.offer_type === "DIGITAL_MARKETING",
   );
-  const allowlistTotalPages = Math.max(1, Math.ceil(allowlist.length / allowlistPageSize));
-  const registrationsTotalPages = Math.max(
+  const hrBrochureTotalPages = Math.max(1, Math.ceil(hrBrochureRequests.length / brochurePageSize));
+  const dmBrochureTotalPages = Math.max(1, Math.ceil(dmBrochureRequests.length / brochurePageSize));
+  const notificationRequestedTotalPages = Math.max(
     1,
-    Math.ceil(registrations.length / registrationsPageSize),
+    Math.ceil(notificationRequestedUsers.length / notificationRequestsPageSize),
   );
+  const feesTotalPages = Math.max(1, Math.ceil(registrations.length / feeRowsPageSize));
+  const remindersTotalPages = Math.max(1, Math.ceil(pendingReminderList.length / remindersPageSize));
+  const transactionsTotalPages = Math.max(1, Math.ceil(transactions.length / transactionsPageSize));
+  const paymentHistoryTotalPages = Math.max(
+    1,
+    Math.ceil((selectedFeeRegistration?.payment_history?.length || 0) / paymentHistoryPageSize),
+  );
+
+  const paginatedHrBrochureRequests = hrBrochureRequests.slice(
+    (hrBrochurePage - 1) * brochurePageSize,
+    hrBrochurePage * brochurePageSize,
+  );
+  const paginatedDmBrochureRequests = dmBrochureRequests.slice(
+    (dmBrochurePage - 1) * brochurePageSize,
+    dmBrochurePage * brochurePageSize,
+  );
+  const paginatedNotificationRequestedUsers = notificationRequestedUsers.slice(
+    (notificationRequestedPage - 1) * notificationRequestsPageSize,
+    notificationRequestedPage * notificationRequestsPageSize,
+  );
+  const paginatedFeeRows = registrations.slice(
+    (feesPage - 1) * feeRowsPageSize,
+    feesPage * feeRowsPageSize,
+  );
+  const paginatedPaymentReminders = pendingReminderList.slice(
+    (paymentRemindersPage - 1) * remindersPageSize,
+    paymentRemindersPage * remindersPageSize,
+  );
+  const paginatedTransactions = transactions.slice(
+    (transactionsPage - 1) * transactionsPageSize,
+    transactionsPage * transactionsPageSize,
+  );
+  const paginatedPaymentHistory = (selectedFeeRegistration?.payment_history || []).slice(
+    (paymentHistoryPage - 1) * paymentHistoryPageSize,
+    paymentHistoryPage * paymentHistoryPageSize,
+  );
+  const allowlistTotalPages = Math.max(1, Math.ceil(allowlist.length / allowlistPageSize));
   const paginatedAllowlist = allowlist.slice(
     (allowlistPage - 1) * allowlistPageSize,
     allowlistPage * allowlistPageSize,
   );
-  const paginatedRegistrations = registrations.slice(
+  const normalizedRegistrationSearch = registrationSearchTerm.trim().toLowerCase();
+  const filteredRegistrations = registrations.filter((row) => {
+    const matchesSearch =
+      !normalizedRegistrationSearch ||
+      row.name.toLowerCase().includes(normalizedRegistrationSearch) ||
+      row.whatsapp_number.toLowerCase().includes(normalizedRegistrationSearch) ||
+      row.email_id.toLowerCase().includes(normalizedRegistrationSearch) ||
+      (row.reg_no || "").toLowerCase().includes(normalizedRegistrationSearch);
+
+    const matchesCourse =
+      registrationCourseFilter === "all" || row.course_selected === registrationCourseFilter;
+
+    const matchesReview =
+      registrationReviewFilter === "all" || row.review_status === registrationReviewFilter;
+
+    const matchesPayment =
+      registrationPaymentFilter === "all" ||
+      (registrationPaymentFilter === "fully_paid" ? row.pending_fee <= 0 : row.pending_fee > 0);
+
+    return matchesSearch && matchesCourse && matchesReview && matchesPayment;
+  });
+  const registrationsTotalPages = Math.max(
+    1,
+    Math.ceil(filteredRegistrations.length / registrationsPageSize),
+  );
+  const paginatedRegistrations = filteredRegistrations.slice(
     (registrationsPage - 1) * registrationsPageSize,
     registrationsPage * registrationsPageSize,
   );
@@ -485,6 +641,52 @@ export default function FormsAdminPage() {
   }, [registrationsPage, registrationsTotalPages]);
 
   useEffect(() => {
+    setRegistrationsPage(1);
+  }, [registrationSearchTerm, registrationCourseFilter, registrationReviewFilter, registrationPaymentFilter]);
+
+  useEffect(() => {
+    if (hrBrochurePage > hrBrochureTotalPages) {
+      setHrBrochurePage(hrBrochureTotalPages);
+    }
+  }, [hrBrochurePage, hrBrochureTotalPages]);
+
+  useEffect(() => {
+    if (dmBrochurePage > dmBrochureTotalPages) {
+      setDmBrochurePage(dmBrochureTotalPages);
+    }
+  }, [dmBrochurePage, dmBrochureTotalPages]);
+
+  useEffect(() => {
+    if (notificationRequestedPage > notificationRequestedTotalPages) {
+      setNotificationRequestedPage(notificationRequestedTotalPages);
+    }
+  }, [notificationRequestedPage, notificationRequestedTotalPages]);
+
+  useEffect(() => {
+    if (feesPage > feesTotalPages) {
+      setFeesPage(feesTotalPages);
+    }
+  }, [feesPage, feesTotalPages]);
+
+  useEffect(() => {
+    if (paymentRemindersPage > remindersTotalPages) {
+      setPaymentRemindersPage(remindersTotalPages);
+    }
+  }, [paymentRemindersPage, remindersTotalPages]);
+
+  useEffect(() => {
+    if (transactionsPage > transactionsTotalPages) {
+      setTransactionsPage(transactionsTotalPages);
+    }
+  }, [transactionsPage, transactionsTotalPages]);
+
+  useEffect(() => {
+    if (paymentHistoryPage > paymentHistoryTotalPages) {
+      setPaymentHistoryPage(paymentHistoryTotalPages);
+    }
+  }, [paymentHistoryPage, paymentHistoryTotalPages]);
+
+  useEffect(() => {
     if (!selectedFeeRegistration) {
       return;
     }
@@ -494,6 +696,10 @@ export default function FormsAdminPage() {
       setSelectedFeeRegistration(refreshed);
     }
   }, [registrations, selectedFeeRegistration]);
+
+  useEffect(() => {
+    setPaymentHistoryPage(1);
+  }, [selectedFeeRegistration?.id]);
 
   return (
     <main className="min-h-screen bg-white py-6 text-slate-900 sm:py-8">
@@ -572,6 +778,115 @@ export default function FormsAdminPage() {
                 </div>
               </div>
 
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Approval Rate</p>
+                  <p className="mt-1 text-xl font-semibold">{approvalRate}%</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Collection Rate</p>
+                  <p className="mt-1 text-xl font-semibold">{collectionRate}%</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Under Review Rate</p>
+                  <p className="mt-1 text-xl font-semibold">{underReviewRate}%</p>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Brochure Requests</p>
+                  <p className="mt-1 text-xl font-semibold">{brochureRequests.length}</p>
+                </div>
+                <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
+                  <p className="text-xs uppercase tracking-wide text-violet-700">HR Registrations</p>
+                  <p className="mt-1 text-xl font-semibold text-violet-700">{hrRegistrationsCount}</p>
+                </div>
+                <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+                  <p className="text-xs uppercase tracking-wide text-blue-700">DM Registrations</p>
+                  <p className="mt-1 text-xl font-semibold text-blue-700">{dmRegistrationsCount}</p>
+                </div>
+                <div className="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3">
+                  <p className="text-xs uppercase tracking-wide text-cyan-700">Notify Requests</p>
+                  <p className="mt-1 text-xl font-semibold text-cyan-700">
+                    {notificationRequestedUsers.length}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                  <p className="text-xs uppercase tracking-wide text-amber-700">Pending Follow-ups</p>
+                  <p className="mt-1 text-xl font-semibold text-amber-700">
+                    {pendingReminderList.length}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                <div className="rounded-xl border border-slate-200 p-4">
+                  <h3 className="text-base font-semibold">Recent Registrations</h3>
+                  <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200">
+                    <table className="min-w-full text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50 text-slate-700">
+                          <th className="px-3 py-2">Reg No</th>
+                          <th className="px-3 py-2">Name</th>
+                          <th className="px-3 py-2">Course</th>
+                          <th className="px-3 py-2">Submitted</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {recentRegistrations.map((row) => (
+                          <tr key={row.id} className="border-b border-slate-100 text-slate-700">
+                            <td className="px-3 py-2">{row.reg_no || "-"}</td>
+                            <td className="px-3 py-2">{row.name}</td>
+                            <td className="px-3 py-2">{row.course_selected || "-"}</td>
+                            <td className="px-3 py-2">{formatDate(row.created_at)}</td>
+                          </tr>
+                        ))}
+                        {recentRegistrations.length === 0 && (
+                          <tr>
+                            <td colSpan={4} className="px-3 py-5 text-center text-slate-500">
+                              No recent registrations.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 p-4">
+                  <h3 className="text-base font-semibold">Top Pending Fees</h3>
+                  <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200">
+                    <table className="min-w-full text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50 text-slate-700">
+                          <th className="px-3 py-2">Reg No</th>
+                          <th className="px-3 py-2">Name</th>
+                          <th className="px-3 py-2">WhatsApp</th>
+                          <th className="px-3 py-2">Pending</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {highestPendingRegistrations.map((row) => (
+                          <tr key={row.id} className="border-b border-slate-100 text-slate-700">
+                            <td className="px-3 py-2">{row.reg_no || "-"}</td>
+                            <td className="px-3 py-2">{row.name}</td>
+                            <td className="px-3 py-2">{row.whatsapp_number}</td>
+                            <td className="px-3 py-2 font-semibold text-rose-700">
+                              {formatCurrency(row.pending_fee || 0)}
+                            </td>
+                          </tr>
+                        ))}
+                        {highestPendingRegistrations.length === 0 && (
+                          <tr>
+                            <td colSpan={4} className="px-3 py-5 text-center text-slate-500">
+                              No pending fee records.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
             </section>
             )}
 
@@ -600,7 +915,7 @@ export default function FormsAdminPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {hrBrochureRequests.map((request) => (
+                          {paginatedHrBrochureRequests.map((request) => (
                             <tr key={request.id} className="border-b border-violet-100 text-slate-700">
                               <td className="px-3 py-2">{request.name}</td>
                               <td className="px-3 py-2">{request.phone_number}</td>
@@ -618,6 +933,14 @@ export default function FormsAdminPage() {
                         </tbody>
                       </table>
                     </div>
+                    <PaginationControls
+                      page={hrBrochurePage}
+                      totalPages={hrBrochureTotalPages}
+                      onPrevious={() => setHrBrochurePage((prev) => Math.max(1, prev - 1))}
+                      onNext={() =>
+                        setHrBrochurePage((prev) => Math.min(hrBrochureTotalPages, prev + 1))
+                      }
+                    />
                   </div>
 
                   <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-3">
@@ -635,7 +958,7 @@ export default function FormsAdminPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {dmBrochureRequests.map((request) => (
+                          {paginatedDmBrochureRequests.map((request) => (
                             <tr key={request.id} className="border-b border-blue-100 text-slate-700">
                               <td className="px-3 py-2">{request.name}</td>
                               <td className="px-3 py-2">{request.phone_number}</td>
@@ -653,7 +976,61 @@ export default function FormsAdminPage() {
                         </tbody>
                       </table>
                     </div>
+                    <PaginationControls
+                      page={dmBrochurePage}
+                      totalPages={dmBrochureTotalPages}
+                      onPrevious={() => setDmBrochurePage((prev) => Math.max(1, prev - 1))}
+                      onNext={() =>
+                        setDmBrochurePage((prev) => Math.min(dmBrochureTotalPages, prev + 1))
+                      }
+                    />
                   </div>
+                </div>
+
+                <div className="mt-6 rounded-xl border border-slate-200 p-4">
+                  <h3 className="text-lg font-semibold">
+                    Notification Requested ({notificationRequestedUsers.length})
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Users who used the Notify Me form on the home page.
+                  </p>
+                  <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                    <table className="min-w-full text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50 text-slate-700">
+                          <th className="px-3 py-2">Email</th>
+                          <th className="px-3 py-2">Requested On</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginatedNotificationRequestedUsers.map((user) => (
+                          <tr key={user.id} className="border-b border-slate-100 text-slate-700">
+                            <td className="px-3 py-2">{user.email}</td>
+                            <td className="px-3 py-2">{formatDate(user.created_at)}</td>
+                          </tr>
+                        ))}
+                        {notificationRequestedUsers.length === 0 && (
+                          <tr>
+                            <td colSpan={2} className="px-3 py-5 text-center text-slate-500">
+                              No notification requests yet.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <PaginationControls
+                    page={notificationRequestedPage}
+                    totalPages={notificationRequestedTotalPages}
+                    onPrevious={() =>
+                      setNotificationRequestedPage((prev) => Math.max(1, prev - 1))
+                    }
+                    onNext={() =>
+                      setNotificationRequestedPage((prev) =>
+                        Math.min(notificationRequestedTotalPages, prev + 1),
+                      )
+                    }
+                  />
                 </div>
               </section>
             )}
@@ -705,7 +1082,7 @@ export default function FormsAdminPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {registrations.map((row) => (
+                      {paginatedFeeRows.map((row) => (
                         <tr key={row.id} className="border-b border-slate-100 text-slate-700">
                           <td className="px-3 py-2 font-medium text-[#2b24ff]">{row.reg_no || "-"}</td>
                           <td className="px-3 py-2">{row.name}</td>
@@ -745,6 +1122,12 @@ export default function FormsAdminPage() {
                     </tbody>
                   </table>
                 </div>
+                <PaginationControls
+                  page={feesPage}
+                  totalPages={feesTotalPages}
+                  onPrevious={() => setFeesPage((prev) => Math.max(1, prev - 1))}
+                  onNext={() => setFeesPage((prev) => Math.min(feesTotalPages, prev + 1))}
+                />
 
                 <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50/40 p-4">
                   <h3 className="text-base font-semibold text-amber-900">
@@ -767,7 +1150,7 @@ export default function FormsAdminPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {pendingReminderList.map((row) => (
+                        {paginatedPaymentReminders.map((row) => (
                           <tr key={row.id} className="border-b border-amber-100 text-slate-700">
                             <td className="px-3 py-2 font-medium text-[#2b24ff]">{row.reg_no || "-"}</td>
                             <td className="px-3 py-2">{row.name}</td>
@@ -794,6 +1177,14 @@ export default function FormsAdminPage() {
                       </tbody>
                     </table>
                   </div>
+                  <PaginationControls
+                    page={paymentRemindersPage}
+                    totalPages={remindersTotalPages}
+                    onPrevious={() => setPaymentRemindersPage((prev) => Math.max(1, prev - 1))}
+                    onNext={() =>
+                      setPaymentRemindersPage((prev) => Math.min(remindersTotalPages, prev + 1))
+                    }
+                  />
                 </div>
 
                 <div className="mt-5 rounded-xl border border-slate-200 p-4">
@@ -814,7 +1205,7 @@ export default function FormsAdminPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {transactions.map((transaction) => (
+                        {paginatedTransactions.map((transaction) => (
                           <tr key={transaction.id} className="border-b border-slate-100 text-slate-700">
                             <td className="px-3 py-2">{formatDate(transaction.payment_date)}</td>
                             <td className="px-3 py-2 font-medium text-[#2b24ff]">
@@ -838,6 +1229,14 @@ export default function FormsAdminPage() {
                       </tbody>
                     </table>
                   </div>
+                  <PaginationControls
+                    page={transactionsPage}
+                    totalPages={transactionsTotalPages}
+                    onPrevious={() => setTransactionsPage((prev) => Math.max(1, prev - 1))}
+                    onNext={() =>
+                      setTransactionsPage((prev) => Math.min(transactionsTotalPages, prev + 1))
+                    }
+                  />
                 </div>
               </section>
             )}
@@ -949,7 +1348,55 @@ export default function FormsAdminPage() {
             {activeTab === "registrations" && (
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
               <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="text-xl font-semibold">Registrations ({registrations.length})</h2>
+                <h2 className="text-xl font-semibold">
+                  Registrations ({filteredRegistrations.length})
+                </h2>
+              </div>
+
+              <div className="mb-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+                <input
+                  value={registrationSearchTerm}
+                  onChange={(event) => setRegistrationSearchTerm(event.target.value)}
+                  placeholder="Search name, phone, email, reg no"
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40 md:col-span-2"
+                />
+                <select
+                  value={registrationCourseFilter}
+                  onChange={(event) =>
+                    setRegistrationCourseFilter(event.target.value as "all" | "HR" | "DM")
+                  }
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                >
+                  <option value="all">All Courses</option>
+                  <option value="HR">HR</option>
+                  <option value="DM">DM</option>
+                </select>
+                <select
+                  value={registrationReviewFilter}
+                  onChange={(event) =>
+                    setRegistrationReviewFilter(
+                      event.target.value as "all" | "approved" | "under_review",
+                    )
+                  }
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                >
+                  <option value="all">All Reviews</option>
+                  <option value="approved">Approved</option>
+                  <option value="under_review">Under Review</option>
+                </select>
+                <select
+                  value={registrationPaymentFilter}
+                  onChange={(event) =>
+                    setRegistrationPaymentFilter(
+                      event.target.value as "all" | "fully_paid" | "pending_fee",
+                    )
+                  }
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                >
+                  <option value="all">All Payment States</option>
+                  <option value="fully_paid">Fully Paid</option>
+                  <option value="pending_fee">Pending Fee</option>
+                </select>
               </div>
 
               <div className="overflow-x-auto rounded-xl border border-slate-200">
@@ -974,7 +1421,20 @@ export default function FormsAdminPage() {
                   <tbody>
                     {paginatedRegistrations.map((row) => (
                       <tr key={row.id} className="border-b border-slate-100 text-slate-700">
-                        <td className="px-3 py-2 font-medium text-[#2b24ff]">{row.reg_no || "-"}</td>
+                        <td className="px-3 py-2 font-medium text-[#2b24ff]">
+                          {row.reg_no ? (
+                            <button
+                              type="button"
+                              onClick={() => openRegistrationDetails(row)}
+                              className="underline underline-offset-4 hover:text-[#221bff]"
+                              title="View student and fee details"
+                            >
+                              {row.reg_no}
+                            </button>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
                         <td className="px-3 py-2">
                           <ReviewBadge status={row.review_status} />
                         </td>
@@ -1218,6 +1678,104 @@ export default function FormsAdminPage() {
             </div>
           )}
 
+          {isRegistrationDetailsModalOpen && selectedRegistrationDetails && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+              <div className="w-full max-w-4xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+                <h3 className="text-lg font-semibold">
+                  Student Details - {selectedRegistrationDetails.reg_no || "No Reg No"}
+                </h3>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-slate-200 p-3">
+                    <p className="text-xs uppercase text-slate-500">Name</p>
+                    <p className="mt-1 font-medium">{selectedRegistrationDetails.name}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 p-3">
+                    <p className="text-xs uppercase text-slate-500">WhatsApp</p>
+                    <p className="mt-1 font-medium">{selectedRegistrationDetails.whatsapp_number}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 p-3">
+                    <p className="text-xs uppercase text-slate-500">Email</p>
+                    <p className="mt-1 font-medium">{selectedRegistrationDetails.email_id}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 p-3">
+                    <p className="text-xs uppercase text-slate-500">Course</p>
+                    <p className="mt-1 font-medium">{selectedRegistrationDetails.course_selected || "-"}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 p-3">
+                    <p className="text-xs uppercase text-slate-500">Qualification</p>
+                    <p className="mt-1 font-medium">{selectedRegistrationDetails.qualification}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 p-3">
+                    <p className="text-xs uppercase text-slate-500">Current Status</p>
+                    <p className="mt-1 font-medium">{selectedRegistrationDetails.current_status || "-"}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 p-3">
+                    <p className="text-xs uppercase text-slate-500">Institution</p>
+                    <p className="mt-1 font-medium">
+                      {selectedRegistrationDetails.last_institution_attended || "-"}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 p-3">
+                    <p className="text-xs uppercase text-slate-500">Place</p>
+                    <p className="mt-1 font-medium">{selectedRegistrationDetails.place}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 p-3">
+                    <p className="text-xs uppercase text-slate-500">Date of Birth</p>
+                    <p className="mt-1 font-medium">{formatDate(selectedRegistrationDetails.date_of_birth)}</p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 p-3">
+                    <p className="text-xs uppercase text-slate-500">Review</p>
+                    <div className="mt-1">
+                      <ReviewBadge status={selectedRegistrationDetails.review_status} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-5 rounded-xl border border-slate-200 p-4">
+                  <h4 className="font-semibold">Fee Details</h4>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                    <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2">
+                      <p className="text-xs uppercase text-indigo-700">Plan</p>
+                      <p className="font-semibold text-indigo-700">
+                        {selectedRegistrationDetails.fee_plan === "one_time"
+                          ? "One-time (30k)"
+                          : "Monthly (10k x 3)"}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2">
+                      <p className="text-xs uppercase text-indigo-700">Total</p>
+                      <p className="font-semibold text-indigo-700">
+                        {formatCurrency(selectedRegistrationDetails.total_fee || 0)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2">
+                      <p className="text-xs uppercase text-cyan-700">Paid</p>
+                      <p className="font-semibold text-cyan-700">
+                        {formatCurrency(selectedRegistrationDetails.total_paid || 0)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2">
+                      <p className="text-xs uppercase text-rose-700">Pending</p>
+                      <p className="font-semibold text-rose-700">
+                        {formatCurrency(selectedRegistrationDetails.pending_fee || 0)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-5 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={closeRegistrationDetails}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2 font-semibold hover:bg-slate-50"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {isFeeModalOpen && selectedFeeRegistration && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
               <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
@@ -1321,7 +1879,7 @@ export default function FormsAdminPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {selectedFeeRegistration.payment_history.map((payment) => (
+                          {paginatedPaymentHistory.map((payment) => (
                             <tr key={payment.id} className="border-b border-slate-100 text-slate-700">
                               <td className="px-3 py-2">{formatDate(payment.payment_date)}</td>
                               <td className="px-3 py-2">{formatCurrency(payment.amount)}</td>
@@ -1343,6 +1901,18 @@ export default function FormsAdminPage() {
                       <p className="px-4 py-6 text-center text-slate-500">No payment entries yet.</p>
                     )}
                   </div>
+                  {selectedFeeRegistration.payment_history?.length > 0 && (
+                    <div className="px-4 pb-4">
+                      <PaginationControls
+                        page={paymentHistoryPage}
+                        totalPages={paymentHistoryTotalPages}
+                        onPrevious={() => setPaymentHistoryPage((prev) => Math.max(1, prev - 1))}
+                        onNext={() =>
+                          setPaymentHistoryPage((prev) => Math.min(paymentHistoryTotalPages, prev + 1))
+                        }
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-5 flex justify-end gap-2">

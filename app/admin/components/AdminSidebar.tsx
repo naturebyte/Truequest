@@ -8,18 +8,18 @@ type AdminSidebarProps = {
 
 const tabs: Array<{ id: AdminTab; label: string }> = [
   { id: "overview", label: "Overview" },
-  { id: "brochure_requests", label: "Brochure Requests" },
+  { id: "registrations", label: "Registrations" },
   { id: "allowlist", label: "Allowed Students" },
   { id: "fees", label: "Fee Management" },
-  { id: "registrations", label: "Registrations" },
+  { id: "brochure_requests", label: "Brochure Requests" },
 ];
 
 export function AdminSidebar({ activeTab, onTabChange, onLogout }: AdminSidebarProps) {
   return (
-    <aside className="flex h-full self-stretch rounded-2xl border border-slate-200 bg-white p-4 shadow-xl lg:flex-col">
+    <aside className="flex h-full self-stretch rounded-2xl border border-slate-200 bg-white p-4 shadow-xl lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)] lg:flex-col">
       <h2 className="text-lg font-semibold">Admin Pages</h2>
       <p className="mt-1 text-sm text-slate-600">Select a page to view only that content.</p>
-      <nav className="mt-4 space-y-2">
+      <nav className="mt-4 space-y-2 lg:flex-1 lg:overflow-y-auto lg:pr-1">
         {tabs.map((tab) => (
           <button
             key={tab.id}

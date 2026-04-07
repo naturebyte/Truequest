@@ -47,6 +47,9 @@ export default function StudentRegistrationPage() {
   const [phoneInfoMessage, setPhoneInfoMessage] = useState("");
   const [isAlreadyRegistered, setIsAlreadyRegistered] = useState(false);
   const [lastVerifiedPhone, setLastVerifiedPhone] = useState("");
+  const adminContactHref = `https://wa.me/919747003913?text=${encodeURIComponent(
+    "Hi admin, I already registered on TrueQuest and need help with my registration details.",
+  )}`;
 
   async function verifyPhone(phoneInput: string) {
     const phone = phoneInput.replace(/\D/g, "").trim();
@@ -340,17 +343,24 @@ export default function StudentRegistrationPage() {
             </p>
           )}
 
-          <button
-            type="submit"
-            disabled={isSubmitting || isAlreadyRegistered}
-            className="w-full rounded-xl bg-lime-400 px-4 py-3 font-semibold text-black transition hover:bg-lime-300 disabled:cursor-not-allowed disabled:opacity-80"
-          >
-            {isAlreadyRegistered
-              ? "Already Registered - Contact Admin"
-              : isSubmitting
-                ? "Submitting..."
-                : "Submit Admission Form"}
-          </button>
+          {isAlreadyRegistered ? (
+            <Link
+              href={adminContactHref}
+              target="_blank"
+              rel="noreferrer"
+              className="block w-full rounded-xl bg-lime-400 px-4 py-3 text-center font-semibold text-black transition hover:bg-lime-300"
+            >
+              Already Registered - Contact Admin
+            </Link>
+          ) : (
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full rounded-xl bg-lime-400 px-4 py-3 font-semibold text-black transition hover:bg-lime-300 disabled:cursor-not-allowed disabled:opacity-80"
+            >
+              {isSubmitting ? "Submitting..." : "Submit Admission Form"}
+            </button>
+          )}
         </form>
 
         <div className="mt-5 text-center text-sm hidden">
