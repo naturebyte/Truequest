@@ -37,11 +37,119 @@ function getErrorMessage(error: unknown, fallbackMessage: string): string {
   return fallbackMessage;
 }
 
+function toDateInputValue(value: string | null | undefined): string {
+  if (!value) {
+    return "";
+  }
+
+  const trimmedValue = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmedValue)) {
+    return trimmedValue;
+  }
+
+  const parsedDate = new Date(trimmedValue);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "";
+  }
+
+  return parsedDate.toISOString().slice(0, 10);
+}
+
 export default function StudentRegistrationPage() {
   const router = useRouter();
   const [formData, setFormData] = useState<FormState>(defaultFormState);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isVerifyingPhone, setIsVerifyingPhone] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [phoneWarning, setPhoneWarning] = useState("");
+  const [phoneInfoMessage, setPhoneInfoMessage] = useState("");
+  const [isAlreadyRegistered, setIsAlreadyRegistered] = useState(false);
+  const [lastVerifiedPhone, setLastVerifiedPhone] = useState("");
+
+  function buildFormStateFromRegistration(
+    registration: Record<string, string | null | undefined>,
+    phoneFallback: string,
+  ): FormState {
+    return {
+      name: registration.name || "",
+      whatsappNumber: registration.whatsapp_number || phoneFallback,
+      emailId: registration.email_id || "",
+      courseSelected:
+        registration.course_selected === "DM" || registration.course_selected === "HR"
+          ? registration.course_selected
+          : "",
+      qualification: registration.qualification || "",
+      currentStatus: registration.current_status || "",
+      lastInstitutionAttended: registration.last_institution_attended || "",
+      place: registration.place || "",
+      dateOfBirth: toDateInputValue(registration.date_of_birth),
+    };
+  }
+
+  async function verifyPhone(phoneInput: string) {
+    const phone = phoneInput.replace(/\D/g, "").trim();
+
+    if (!phone) {
+      return;
+    }
+
+    setIsVerifyingPhone(true);
+    setErrorMessage("");
+    setPhoneWarning("");
+    setPhoneInfoMessage("");
+
+    try {
+      const response = await fetch(`/api/forms/register?phone=${encodeURIComponent(phone)}`);
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Unable to verify this phone number.");
+      }
+
+      if (data.status === "allowlisted") {
+        setIsAlreadyRegistered(false);
+        setFormData((prev) => ({ ...prev, name: data.student?.name || prev.name }));
+        setPhoneInfoMessage("Verified number found. Name auto-filled. You can edit it.");
+        setLastVerifiedPhone(phone);
+        return;
+      }
+
+      if (data.status === "already_registered") {
+        const registration = data.registration;
+        setIsAlreadyRegistered(true);
+        setFormData(buildFormStateFromRegistration(registration, phone));
+        setPhoneInfoMessage(
+          `Already registered. Code: ${registration.reg_no}. To make changes, contact admin.`,
+        );
+        setLastVerifiedPhone(phone);
+        return;
+      }
+
+      if (data.status === "under_review") {
+        setIsAlreadyRegistered(false);
+        setFormData((prev) =>
+          data.registration
+            ? buildFormStateFromRegistration(data.registration, phone)
+            : { ...prev, whatsappNumber: phone },
+        );
+        setPhoneInfoMessage(
+          "This number has a pending submission under review. You can submit updated details.",
+        );
+        setLastVerifiedPhone(phone);
+        return;
+      }
+
+      setIsAlreadyRegistered(false);
+      setPhoneWarning(
+        "This number is not in admin's approved list. Submission is allowed, but it will be under review.",
+      );
+      setLastVerifiedPhone(phone);
+    } catch (error: unknown) {
+      setErrorMessage(getErrorMessage(error, "Unable to verify number."));
+    } finally {
+      setIsVerifyingPhone(false);
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -61,8 +169,15 @@ export default function StudentRegistrationPage() {
         throw new Error(data?.error || "Unable to submit the form.");
       }
 
+      if (data.status === "registered" || data.status === "already_registered") {
+        router.push(
+          `/forms/register/confirmation?mode=approved&regNo=${encodeURIComponent(data.regNo)}&name=${encodeURIComponent(data.studentName)}`,
+        );
+        return;
+      }
+
       router.push(
-        `/forms/register/confirmation?regNo=${encodeURIComponent(data.regNo)}&name=${encodeURIComponent(data.studentName)}`,
+        `/forms/register/confirmation?mode=under-review&name=${encodeURIComponent(data.studentName)}`,
       );
     } catch (error: unknown) {
       setErrorMessage(getErrorMessage(error, "Something went wrong."));
@@ -72,7 +187,7 @@ export default function StudentRegistrationPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-[#221bff] via-[#2b24ff] to-[#3f37ff] text-white py-10 sm:py-16">
+    <main className="min-h-screen bg-linear-to-br from-[#221bff] via-[#2b24ff] to-[#3f37ff] py-10 text-white sm:py-16">
       <div className="mx-auto max-w-3xl px-4 sm:px-6">
         <div className="text-center">
           <Image
@@ -92,32 +207,70 @@ export default function StudentRegistrationPage() {
           className="mt-8 rounded-2xl border border-white/20 bg-white/10 p-5 sm:p-7 shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur-md space-y-4"
         >
           <label className="block">
-            <span className="mb-1 block text-sm text-white/90">1. Name *</span>
+            <span className="mb-1 block text-sm text-white/90">1. WhatsApp Number *</span>
             <input
               required
+              value={formData.whatsappNumber}
+              onChange={(event) => {
+                const inputValue = event.target.value;
+                const digitOnlyPhone = inputValue.replace(/\D/g, "");
+                setFormData({ ...formData, whatsappNumber: inputValue });
+                setIsAlreadyRegistered(false);
+                setPhoneWarning("");
+                setPhoneInfoMessage("");
+                setLastVerifiedPhone("");
+
+                if (digitOnlyPhone.length > 10) {
+                  setPhoneWarning("Phone number cannot exceed 10 digits.");
+                  return;
+                }
+
+                if (digitOnlyPhone.length === 10 && lastVerifiedPhone !== digitOnlyPhone) {
+                  void verifyPhone(digitOnlyPhone);
+                }
+              }}
+              className="w-full rounded-xl bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-lime-400/80"
+            />
+            <p className="mt-1 text-xs text-white/70">
+              Auto-verification runs when exactly 10 digits are entered.
+            </p>
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-sm text-white/90">2. Name *</span>
+            <input
+              required
+              disabled={isAlreadyRegistered}
               value={formData.name}
               onChange={(event) => setFormData({ ...formData, name: event.target.value })}
               className="w-full rounded-xl bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-lime-400/80"
             />
           </label>
 
-          <label className="block">
-            <span className="mb-1 block text-sm text-white/90">2. WhatsApp Number *</span>
-            <input
-              required
-              value={formData.whatsappNumber}
-              onChange={(event) =>
-                setFormData({ ...formData, whatsappNumber: event.target.value })
-              }
-              className="w-full rounded-xl bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-lime-400/80"
-            />
-          </label>
+          {isVerifyingPhone && (
+            <p className="rounded-xl border border-white/30 bg-white/10 px-4 py-3 text-sm">
+              Verifying phone number...
+            </p>
+          )}
+
+          {phoneInfoMessage && (
+            <p className="rounded-xl border border-lime-300/60 bg-lime-500/20 px-4 py-3 text-sm">
+              {phoneInfoMessage}
+            </p>
+          )}
+
+          {phoneWarning && (
+            <p className="rounded-xl border border-amber-300/60 bg-amber-500/20 px-4 py-3 text-sm text-amber-100">
+              {phoneWarning}
+            </p>
+          )}
 
           <label className="block">
             <span className="mb-1 block text-sm text-white/90">3. Email ID *</span>
             <input
               type="email"
               required
+              disabled={isAlreadyRegistered}
               value={formData.emailId}
               onChange={(event) =>
                 setFormData({ ...formData, emailId: event.target.value })
@@ -131,6 +284,7 @@ export default function StudentRegistrationPage() {
               4. Course Selected (DM / HR)
             </span>
             <select
+              disabled={isAlreadyRegistered}
               value={formData.courseSelected}
               onChange={(event) =>
                 setFormData({
@@ -150,6 +304,7 @@ export default function StudentRegistrationPage() {
             <span className="mb-1 block text-sm text-white/90">5. Qualification *</span>
             <input
               required
+              disabled={isAlreadyRegistered}
               value={formData.qualification}
               onChange={(event) =>
                 setFormData({ ...formData, qualification: event.target.value })
@@ -163,6 +318,7 @@ export default function StudentRegistrationPage() {
               6. Current Status (Student / Working / Other)
             </span>
             <select
+              disabled={isAlreadyRegistered}
               value={formData.currentStatus}
               onChange={(event) =>
                 setFormData({ ...formData, currentStatus: event.target.value })
@@ -181,6 +337,7 @@ export default function StudentRegistrationPage() {
               7. Last Institution Attended
             </span>
             <input
+              disabled={isAlreadyRegistered}
               value={formData.lastInstitutionAttended}
               onChange={(event) =>
                 setFormData({
@@ -196,6 +353,7 @@ export default function StudentRegistrationPage() {
             <span className="mb-1 block text-sm text-white/90">8. Place *</span>
             <input
               required
+              disabled={isAlreadyRegistered}
               value={formData.place}
               onChange={(event) => setFormData({ ...formData, place: event.target.value })}
               className="w-full rounded-xl bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-lime-400/80"
@@ -207,6 +365,7 @@ export default function StudentRegistrationPage() {
             <input
               type="date"
               required
+              disabled={isAlreadyRegistered}
               value={formData.dateOfBirth}
               onChange={(event) =>
                 setFormData({ ...formData, dateOfBirth: event.target.value })
@@ -223,10 +382,14 @@ export default function StudentRegistrationPage() {
 
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || isAlreadyRegistered}
             className="w-full rounded-xl bg-lime-400 px-4 py-3 font-semibold text-black transition hover:bg-lime-300 disabled:cursor-not-allowed disabled:opacity-80"
           >
-            {isSubmitting ? "Submitting..." : "Submit Admission Form"}
+            {isAlreadyRegistered
+              ? "Already Registered - Contact Admin"
+              : isSubmitting
+                ? "Submitting..."
+                : "Submit Admission Form"}
           </button>
         </form>
 
