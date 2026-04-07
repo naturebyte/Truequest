@@ -31,7 +31,7 @@ export default function FormsDashboardPage() {
               Fill and submit student admission details.
             </p>
           </Link>
-
+{ process.env.NODE_ENV === "development" && (
           <Link
             href="/forms/admin"
             className="rounded-2xl border border-white/20 bg-white/10 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur-md transition hover:bg-white/20"
@@ -42,6 +42,7 @@ export default function FormsDashboardPage() {
               Login and check all submitted registrations.
             </p>
           </Link>
+          )}
         </div>
       </div>
     </main>

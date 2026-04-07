@@ -287,6 +287,14 @@ export async function POST(req: NextRequest) {
         updated_at = now()
     `;
 
+    if (isAllowlisted) {
+      await sql`
+        UPDATE student_allowlist
+        SET name = ${name}, updated_at = now()
+        WHERE whatsapp_number = ${whatsappNumber}
+      `;
+    }
+
     if (isAllowlisted && regNo) {
       return NextResponse.json(
         { status: "registered", regNo, studentName: name },

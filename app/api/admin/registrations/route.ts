@@ -6,6 +6,7 @@ import {
 } from "@/lib/admin-auth";
 
 type CourseSelection = "DM" | "HR" | null;
+type FeePlan = "monthly_3x" | "one_time";
 const REGISTRATION_NUMBER_BASE = 500;
 
 function normalizeString(value: unknown): string {
@@ -20,6 +21,11 @@ function parseCourse(value: unknown): CourseSelection {
   }
 
   return null;
+}
+
+function parseFeePlan(value: unknown): FeePlan {
+  const feePlan = normalizeString(value);
+  return feePlan === "one_time" ? "one_time" : "monthly_3x";
 }
 
 function getRegistrationNumber(course: CourseSelection, sequenceNumber: number): string {
@@ -88,6 +94,27 @@ async function ensureTables() {
     ALTER TABLE student_registrations
     ALTER COLUMN reg_no DROP NOT NULL
   `;
+
+  await sql`
+    ALTER TABLE student_registrations
+    ADD COLUMN IF NOT EXISTS fee_plan text NOT NULL DEFAULT 'monthly_3x'
+  `;
+
+  await sql`
+    ALTER TABLE student_registrations
+    ADD COLUMN IF NOT EXISTS total_fee integer NOT NULL DEFAULT 30000
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS student_fee_payments (
+      id serial PRIMARY KEY,
+      registration_id integer NOT NULL REFERENCES student_registrations(id) ON DELETE CASCADE,
+      amount integer NOT NULL CHECK (amount > 0),
+      payment_date date NOT NULL,
+      notes text,
+      created_at timestamptz DEFAULT now()
+    )
+  `;
 }
 
 function isAuthorized(req: NextRequest): boolean {
@@ -104,6 +131,34 @@ export async function GET(req: NextRequest) {
     await ensureTables();
 
     const registrations = (await sql`
+      WITH fee_stats AS (
+        SELECT
+          registration_id,
+          COALESCE(SUM(amount), 0)::int AS total_paid,
+          MAX(payment_date) AS last_payment_date,
+          COUNT(*)::int AS payment_count
+        FROM student_fee_payments
+        GROUP BY registration_id
+      ),
+      fee_history AS (
+        SELECT
+          registration_id,
+          COALESCE(
+            json_agg(
+              json_build_object(
+                'id', id,
+                'amount', amount,
+                'payment_date', payment_date,
+                'notes', notes,
+                'created_at', created_at
+              )
+              ORDER BY payment_date DESC, created_at DESC
+            ),
+            '[]'::json
+          ) AS payment_history
+        FROM student_fee_payments
+        GROUP BY registration_id
+      )
       SELECT
         id,
         reg_no,
@@ -117,8 +172,17 @@ export async function GET(req: NextRequest) {
         place,
         date_of_birth,
         review_status,
-        created_at
+        created_at,
+        fee_plan,
+        total_fee,
+        COALESCE(fee_stats.total_paid, 0) AS total_paid,
+        GREATEST(total_fee - COALESCE(fee_stats.total_paid, 0), 0) AS pending_fee,
+        fee_stats.last_payment_date,
+        COALESCE(fee_stats.payment_count, 0) AS payment_count,
+        COALESCE(fee_history.payment_history, '[]'::json) AS payment_history
       FROM student_registrations
+      LEFT JOIN fee_stats ON fee_stats.registration_id = student_registrations.id
+      LEFT JOIN fee_history ON fee_history.registration_id = student_registrations.id
       ORDER BY created_at DESC
     `) as Array<{
       id: number;
@@ -134,6 +198,19 @@ export async function GET(req: NextRequest) {
       date_of_birth: string;
       review_status: string;
       created_at: string;
+      fee_plan: FeePlan;
+      total_fee: number;
+      total_paid: number;
+      pending_fee: number;
+      last_payment_date: string | null;
+      payment_count: number;
+      payment_history: Array<{
+        id: number;
+        amount: number;
+        payment_date: string;
+        notes: string | null;
+        created_at: string;
+      }>;
     }>;
 
     const allowlist = (await sql`
@@ -147,7 +224,34 @@ export async function GET(req: NextRequest) {
       created_at: string;
     }>;
 
-    return NextResponse.json({ registrations, allowlist }, { status: 200 });
+    const transactions = (await sql`
+      SELECT
+        student_fee_payments.id,
+        student_fee_payments.registration_id,
+        student_fee_payments.amount,
+        student_fee_payments.payment_date,
+        student_fee_payments.notes,
+        student_fee_payments.created_at,
+        student_registrations.reg_no,
+        student_registrations.name,
+        student_registrations.whatsapp_number
+      FROM student_fee_payments
+      INNER JOIN student_registrations
+        ON student_registrations.id = student_fee_payments.registration_id
+      ORDER BY student_fee_payments.payment_date DESC, student_fee_payments.created_at DESC
+    `) as Array<{
+      id: number;
+      registration_id: number;
+      amount: number;
+      payment_date: string;
+      notes: string | null;
+      created_at: string;
+      reg_no: string | null;
+      name: string;
+      whatsapp_number: string;
+    }>;
+
+    return NextResponse.json({ registrations, allowlist, transactions }, { status: 200 });
   } catch (error) {
     console.error("Error fetching registrations:", error);
     return NextResponse.json(
@@ -233,6 +337,8 @@ export async function PATCH(req: NextRequest) {
       const lastInstitutionAttended = normalizeString(body.lastInstitutionAttended);
       const place = normalizeString(body.place);
       const dateOfBirth = normalizeString(body.dateOfBirth);
+      const feePlan = parseFeePlan(body.feePlan);
+      const totalFee = Number(body.totalFee) || 30000;
 
       if (!id || !name || !emailId || !qualification || !place || !dateOfBirth) {
         return NextResponse.json({ error: "Please fill all required fields." }, { status: 400 });
@@ -249,6 +355,8 @@ export async function PATCH(req: NextRequest) {
           last_institution_attended = ${lastInstitutionAttended || null},
           place = ${place},
           date_of_birth = ${dateOfBirth},
+          fee_plan = ${feePlan},
+          total_fee = ${totalFee},
           updated_at = now()
         WHERE id = ${id}
       `;
@@ -263,11 +371,16 @@ export async function PATCH(req: NextRequest) {
       }
 
       const targetRow = (await sql`
-        SELECT course_selected, reg_no
+        SELECT course_selected, reg_no, name, whatsapp_number
         FROM student_registrations
         WHERE id = ${id}
         LIMIT 1
-      `) as Array<{ course_selected: string | null; reg_no: string | null }>;
+      `) as Array<{
+        course_selected: string | null;
+        reg_no: string | null;
+        name: string;
+        whatsapp_number: string;
+      }>;
 
       if (!targetRow[0]) {
         return NextResponse.json({ error: "Registration not found." }, { status: 404 });
@@ -278,6 +391,12 @@ export async function PATCH(req: NextRequest) {
           UPDATE student_registrations
           SET review_status = 'approved', updated_at = now()
           WHERE id = ${id}
+        `;
+        await sql`
+          INSERT INTO student_allowlist (name, whatsapp_number, updated_at)
+          VALUES (${targetRow[0].name}, ${targetRow[0].whatsapp_number}, now())
+          ON CONFLICT (whatsapp_number) DO UPDATE
+          SET name = EXCLUDED.name, updated_at = now()
         `;
 
         return NextResponse.json({ status: "ok", regNo: targetRow[0].reg_no }, { status: 200 });
@@ -292,8 +411,61 @@ export async function PATCH(req: NextRequest) {
         SET reg_no = ${regNo}, review_status = 'approved', updated_at = now()
         WHERE id = ${id}
       `;
+      await sql`
+        INSERT INTO student_allowlist (name, whatsapp_number, updated_at)
+        VALUES (${targetRow[0].name}, ${targetRow[0].whatsapp_number}, now())
+        ON CONFLICT (whatsapp_number) DO UPDATE
+        SET name = EXCLUDED.name, updated_at = now()
+      `;
 
       return NextResponse.json({ status: "ok", regNo }, { status: 200 });
+    }
+
+    if (action === "registration_fee_update") {
+      const id = Number(body.id);
+      const feePlan = parseFeePlan(body.feePlan);
+      const totalFee = Number(body.totalFee) || 30000;
+
+      if (!id) {
+        return NextResponse.json({ error: "Registration id is required." }, { status: 400 });
+      }
+
+      if (totalFee <= 0) {
+        return NextResponse.json({ error: "Total fee must be greater than 0." }, { status: 400 });
+      }
+
+      await sql`
+        UPDATE student_registrations
+        SET fee_plan = ${feePlan}, total_fee = ${totalFee}, updated_at = now()
+        WHERE id = ${id}
+      `;
+
+      return NextResponse.json({ status: "ok" }, { status: 200 });
+    }
+
+    if (action === "registration_payment_add") {
+      const registrationId = Number(body.registrationId);
+      const amount = Number(body.amount);
+      const paymentDate = normalizeString(body.paymentDate);
+      const notes = normalizeString(body.notes);
+
+      if (!registrationId || !amount || !paymentDate) {
+        return NextResponse.json(
+          { error: "Registration, amount and payment date are required." },
+          { status: 400 },
+        );
+      }
+
+      if (amount <= 0) {
+        return NextResponse.json({ error: "Amount must be greater than 0." }, { status: 400 });
+      }
+
+      await sql`
+        INSERT INTO student_fee_payments (registration_id, amount, payment_date, notes)
+        VALUES (${registrationId}, ${amount}, ${paymentDate}, ${notes || null})
+      `;
+
+      return NextResponse.json({ status: "ok" }, { status: 200 });
     }
 
     return NextResponse.json({ error: "Invalid action." }, { status: 400 });
@@ -325,6 +497,11 @@ export async function DELETE(req: NextRequest) {
 
     if (action === "registration_delete") {
       await sql`DELETE FROM student_registrations WHERE id = ${id}`;
+      return NextResponse.json({ status: "ok" }, { status: 200 });
+    }
+
+    if (action === "registration_payment_delete") {
+      await sql`DELETE FROM student_fee_payments WHERE id = ${id}`;
       return NextResponse.json({ status: "ok" }, { status: 200 });
     }
 

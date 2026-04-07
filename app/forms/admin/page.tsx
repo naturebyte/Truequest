@@ -17,6 +17,33 @@ type RegistrationRecord = {
   date_of_birth: string;
   review_status: "approved" | "under_review";
   created_at: string;
+  fee_plan: "monthly_3x" | "one_time";
+  total_fee: number;
+  total_paid: number;
+  pending_fee: number;
+  last_payment_date: string | null;
+  payment_count: number;
+  payment_history: FeePayment[];
+};
+
+type FeePayment = {
+  id: number;
+  amount: number;
+  payment_date: string;
+  notes: string | null;
+  created_at: string;
+};
+
+type FeeTransaction = {
+  id: number;
+  registration_id: number;
+  amount: number;
+  payment_date: string;
+  notes: string | null;
+  created_at: string;
+  reg_no: string | null;
+  name: string;
+  whatsapp_number: string;
 };
 
 type AllowlistRecord = {
@@ -26,7 +53,7 @@ type AllowlistRecord = {
   created_at: string;
 };
 
-type AdminTab = "overview" | "allowlist" | "registrations";
+type AdminTab = "overview" | "allowlist" | "registrations" | "fees";
 
 function getErrorMessage(error: unknown, fallbackMessage: string): string {
   if (error instanceof Error && error.message) {
@@ -48,6 +75,10 @@ function formatDate(value: string): string {
     month: "short",
     year: "numeric",
   });
+}
+
+function formatCurrency(value: number): string {
+  return `Rs ${value.toLocaleString("en-IN")}`;
 }
 
 function getAgeFromDateOfBirth(value: string): string {
@@ -127,6 +158,7 @@ export default function FormsAdminPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [registrations, setRegistrations] = useState<RegistrationRecord[]>([]);
   const [allowlist, setAllowlist] = useState<AllowlistRecord[]>([]);
+  const [transactions, setTransactions] = useState<FeeTransaction[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [allowName, setAllowName] = useState("");
   const [allowPhone, setAllowPhone] = useState("");
@@ -139,6 +171,12 @@ export default function FormsAdminPage() {
   const [registrationsPage, setRegistrationsPage] = useState(1);
   const [activeTab, setActiveTab] = useState<AdminTab>("overview");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isFeeModalOpen, setIsFeeModalOpen] = useState(false);
+  const [selectedFeeRegistration, setSelectedFeeRegistration] = useState<RegistrationRecord | null>(null);
+  const [feePlan, setFeePlan] = useState<"monthly_3x" | "one_time">("monthly_3x");
+  const [paymentAmount, setPaymentAmount] = useState("10000");
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
+  const [paymentNotes, setPaymentNotes] = useState("");
 
   async function fetchRegistrations() {
     const response = await fetch("/api/admin/registrations");
@@ -154,6 +192,7 @@ export default function FormsAdminPage() {
 
     setRegistrations(data.registrations || []);
     setAllowlist(data.allowlist || []);
+    setTransactions(data.transactions || []);
     setIsAuthenticated(true);
   }
 
@@ -423,6 +462,112 @@ export default function FormsAdminPage() {
     }
   }
 
+  function openFeeModal(registration: RegistrationRecord) {
+    setSelectedFeeRegistration(registration);
+    setFeePlan(registration.fee_plan || "monthly_3x");
+    setPaymentAmount(registration.fee_plan === "one_time" ? "30000" : "10000");
+    setPaymentDate(new Date().toISOString().slice(0, 10));
+    setPaymentNotes("");
+    setIsFeeModalOpen(true);
+  }
+
+  function closeFeeModal() {
+    setIsFeeModalOpen(false);
+    setSelectedFeeRegistration(null);
+    setPaymentNotes("");
+  }
+
+  async function handleFeePlanUpdate() {
+    if (!selectedFeeRegistration) {
+      return;
+    }
+
+    setErrorMessage("");
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/admin/registrations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "registration_fee_update",
+          id: selectedFeeRegistration.id,
+          feePlan,
+          totalFee: 30000,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "Unable to update fee plan.");
+      }
+
+      await fetchRegistrations();
+    } catch (error: unknown) {
+      setErrorMessage(getErrorMessage(error, "Unable to update fee plan."));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleAddPayment() {
+    if (!selectedFeeRegistration) {
+      return;
+    }
+
+    setErrorMessage("");
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/admin/registrations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "registration_payment_add",
+          registrationId: selectedFeeRegistration.id,
+          amount: Number(paymentAmount),
+          paymentDate,
+          notes: paymentNotes,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "Unable to add payment.");
+      }
+
+      setPaymentNotes("");
+      await fetchRegistrations();
+    } catch (error: unknown) {
+      setErrorMessage(getErrorMessage(error, "Unable to add payment."));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleDeletePayment(paymentId: number) {
+    const isConfirmed = window.confirm("Delete this payment entry?");
+    if (!isConfirmed) {
+      return;
+    }
+
+    setErrorMessage("");
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/admin/registrations", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "registration_payment_delete", id: paymentId }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "Unable to delete payment.");
+      }
+
+      await fetchRegistrations();
+    } catch (error: unknown) {
+      setErrorMessage(getErrorMessage(error, "Unable to delete payment."));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   const allowlistPageSize = 8;
   const registrationsPageSize = 10;
 
@@ -430,6 +575,12 @@ export default function FormsAdminPage() {
     (registration) => registration.review_status === "approved",
   ).length;
   const underReviewRegistrationsCount = registrations.length - approvedRegistrationsCount;
+  const totalFeeAmount = registrations.reduce((sum, row) => sum + (row.total_fee || 0), 0);
+  const totalPaidAmount = registrations.reduce((sum, row) => sum + (row.total_paid || 0), 0);
+  const totalPendingAmount = registrations.reduce((sum, row) => sum + (row.pending_fee || 0), 0);
+  const pendingReminderList = registrations
+    .filter((row) => row.pending_fee > 0)
+    .sort((a, b) => b.pending_fee - a.pending_fee);
   const allowlistTotalPages = Math.max(1, Math.ceil(allowlist.length / allowlistPageSize));
   const registrationsTotalPages = Math.max(
     1,
@@ -455,6 +606,17 @@ export default function FormsAdminPage() {
       setRegistrationsPage(registrationsTotalPages);
     }
   }, [registrationsPage, registrationsTotalPages]);
+
+  useEffect(() => {
+    if (!selectedFeeRegistration) {
+      return;
+    }
+
+    const refreshed = registrations.find((row) => row.id === selectedFeeRegistration.id);
+    if (refreshed) {
+      setSelectedFeeRegistration(refreshed);
+    }
+  }, [registrations, selectedFeeRegistration]);
 
   return (
     <main className="min-h-screen bg-white py-6 text-slate-900 sm:py-8">
@@ -534,6 +696,17 @@ export default function FormsAdminPage() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => setActiveTab("fees")}
+                  className={`block w-full rounded-lg border px-3 py-2 text-left text-sm ${
+                    activeTab === "fees"
+                      ? "border-[#2b24ff]/30 bg-[#2b24ff]/10 text-[#2b24ff]"
+                      : "border-slate-200 bg-white hover:bg-slate-50"
+                  }`}
+                >
+                  Fee Management
+                </button>
+                <button
+                  type="button"
                   onClick={() => setActiveTab("registrations")}
                   className={`block w-full rounded-lg border px-3 py-2 text-left text-sm ${
                     activeTab === "registrations"
@@ -593,8 +766,210 @@ export default function FormsAdminPage() {
                   <p className="text-xs uppercase tracking-wide text-emerald-700">Approved</p>
                   <p className="mt-1 text-2xl font-semibold text-emerald-700">{approvedRegistrationsCount}</p>
                 </div>
+                <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3">
+                  <p className="text-xs uppercase tracking-wide text-indigo-700">Total Fee</p>
+                  <p className="mt-1 text-2xl font-semibold text-indigo-700">
+                    {formatCurrency(totalFeeAmount)}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3">
+                  <p className="text-xs uppercase tracking-wide text-cyan-700">Paid</p>
+                  <p className="mt-1 text-2xl font-semibold text-cyan-700">
+                    {formatCurrency(totalPaidAmount)}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3">
+                  <p className="text-xs uppercase tracking-wide text-rose-700">Pending</p>
+                  <p className="mt-1 text-2xl font-semibold text-rose-700">
+                    {formatCurrency(totalPendingAmount)}
+                  </p>
+                </div>
               </div>
             </section>
+            )}
+
+            {activeTab === "fees" && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
+                <div className="mb-4">
+                  <h2 className="text-xl font-semibold">Fee Management</h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Track total fee, paid amount, pending balance, fee plans, and payment dates.
+                  </p>
+                </div>
+
+                <div className="mb-4 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3">
+                    <p className="text-xs uppercase tracking-wide text-indigo-700">Total Fee</p>
+                    <p className="mt-1 text-2xl font-semibold text-indigo-700">
+                      {formatCurrency(totalFeeAmount)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3">
+                    <p className="text-xs uppercase tracking-wide text-cyan-700">Total Paid</p>
+                    <p className="mt-1 text-2xl font-semibold text-cyan-700">
+                      {formatCurrency(totalPaidAmount)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3">
+                    <p className="text-xs uppercase tracking-wide text-rose-700">Total Pending</p>
+                    <p className="mt-1 text-2xl font-semibold text-rose-700">
+                      {formatCurrency(totalPendingAmount)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="min-w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50 text-slate-700">
+                        <th className="px-3 py-2">Reg No</th>
+                        <th className="px-3 py-2">Name</th>
+                        <th className="px-3 py-2">WhatsApp</th>
+                        <th className="px-3 py-2">Plan</th>
+                        <th className="px-3 py-2">Total</th>
+                        <th className="px-3 py-2">Paid</th>
+                        <th className="px-3 py-2">Pending</th>
+                        <th className="px-3 py-2">Last Payment</th>
+                        <th className="px-3 py-2">Entries</th>
+                        <th className="px-3 py-2">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {registrations.map((row) => (
+                        <tr key={row.id} className="border-b border-slate-100 text-slate-700">
+                          <td className="px-3 py-2 font-medium text-[#2b24ff]">{row.reg_no || "-"}</td>
+                          <td className="px-3 py-2">{row.name}</td>
+                          <td className="px-3 py-2">{row.whatsapp_number}</td>
+                          <td className="px-3 py-2">
+                            {row.fee_plan === "one_time" ? "One-time (30k)" : "Monthly (10k x 3)"}
+                          </td>
+                          <td className="px-3 py-2">{formatCurrency(row.total_fee || 0)}</td>
+                          <td className="px-3 py-2 text-cyan-700">
+                            {formatCurrency(row.total_paid || 0)}
+                          </td>
+                          <td className="px-3 py-2 text-rose-700">
+                            {formatCurrency(row.pending_fee || 0)}
+                          </td>
+                          <td className="px-3 py-2">
+                            {row.last_payment_date ? formatDate(row.last_payment_date) : "-"}
+                          </td>
+                          <td className="px-3 py-2">{row.payment_count || 0}</td>
+                          <td className="px-3 py-2">
+                            <button
+                              type="button"
+                              onClick={() => openFeeModal(row)}
+                              className="rounded-lg border border-slate-200 px-3 py-1.5 hover:bg-slate-50"
+                            >
+                              Manage
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {registrations.length === 0 && (
+                        <tr>
+                          <td colSpan={10} className="px-3 py-6 text-center text-slate-500">
+                            No registrations found.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50/40 p-4">
+                  <h3 className="text-base font-semibold text-amber-900">
+                    Payment Reminders ({pendingReminderList.length})
+                  </h3>
+                  <p className="mt-1 text-sm text-amber-800">
+                    Students with pending fee balance. Use this list for follow-up reminders.
+                  </p>
+                  <div className="mt-3 overflow-x-auto rounded-lg border border-amber-200 bg-white">
+                    <table className="min-w-full text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-amber-200 bg-amber-50 text-amber-900">
+                          <th className="px-3 py-2">Reg No</th>
+                          <th className="px-3 py-2">Name</th>
+                          <th className="px-3 py-2">WhatsApp</th>
+                          <th className="px-3 py-2">Plan</th>
+                          <th className="px-3 py-2">Paid</th>
+                          <th className="px-3 py-2">Pending</th>
+                          <th className="px-3 py-2">Last Payment</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pendingReminderList.map((row) => (
+                          <tr key={row.id} className="border-b border-amber-100 text-slate-700">
+                            <td className="px-3 py-2 font-medium text-[#2b24ff]">{row.reg_no || "-"}</td>
+                            <td className="px-3 py-2">{row.name}</td>
+                            <td className="px-3 py-2">{row.whatsapp_number}</td>
+                            <td className="px-3 py-2">
+                              {row.fee_plan === "one_time" ? "One-time (30k)" : "Monthly (10k x 3)"}
+                            </td>
+                            <td className="px-3 py-2 text-cyan-700">{formatCurrency(row.total_paid || 0)}</td>
+                            <td className="px-3 py-2 font-semibold text-rose-700">
+                              {formatCurrency(row.pending_fee || 0)}
+                            </td>
+                            <td className="px-3 py-2">
+                              {row.last_payment_date ? formatDate(row.last_payment_date) : "No payment yet"}
+                            </td>
+                          </tr>
+                        ))}
+                        {pendingReminderList.length === 0 && (
+                          <tr>
+                            <td colSpan={7} className="px-3 py-5 text-center text-slate-500">
+                              No pending balances. All students are cleared.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="mt-5 rounded-xl border border-slate-200 p-4">
+                  <h3 className="text-base font-semibold">Transaction History ({transactions.length})</h3>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Complete payment transactions across all students, latest first.
+                  </p>
+                  <div className="mt-3 max-h-96 overflow-auto rounded-lg border border-slate-200">
+                    <table className="min-w-full text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50 text-slate-700">
+                          <th className="px-3 py-2">Date</th>
+                          <th className="px-3 py-2">Reg No</th>
+                          <th className="px-3 py-2">Name</th>
+                          <th className="px-3 py-2">WhatsApp</th>
+                          <th className="px-3 py-2">Amount</th>
+                          <th className="px-3 py-2">Notes</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {transactions.map((transaction) => (
+                          <tr key={transaction.id} className="border-b border-slate-100 text-slate-700">
+                            <td className="px-3 py-2">{formatDate(transaction.payment_date)}</td>
+                            <td className="px-3 py-2 font-medium text-[#2b24ff]">
+                              {transaction.reg_no || "-"}
+                            </td>
+                            <td className="px-3 py-2">{transaction.name}</td>
+                            <td className="px-3 py-2">{transaction.whatsapp_number}</td>
+                            <td className="px-3 py-2 font-semibold text-emerald-700">
+                              {formatCurrency(transaction.amount)}
+                            </td>
+                            <td className="px-3 py-2">{transaction.notes || "-"}</td>
+                          </tr>
+                        ))}
+                        {transactions.length === 0 && (
+                          <tr>
+                            <td colSpan={6} className="px-3 py-5 text-center text-slate-500">
+                              No transactions recorded yet.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </section>
             )}
 
             {activeTab === "allowlist" && (
@@ -967,6 +1342,146 @@ export default function FormsAdminPage() {
                     className="rounded-xl bg-[#2b24ff] px-4 py-2 font-semibold text-white hover:bg-[#221bff] disabled:opacity-70"
                   >
                     Save Changes
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isFeeModalOpen && selectedFeeRegistration && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+              <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
+                <h3 className="text-lg font-semibold">
+                  Manage Fees - {selectedFeeRegistration.name} ({selectedFeeRegistration.reg_no || "No Reg No"})
+                </h3>
+                <div className="mt-4 grid gap-3 sm:grid-cols-4">
+                  <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2">
+                    <p className="text-xs uppercase text-indigo-700">Total</p>
+                    <p className="font-semibold text-indigo-700">{formatCurrency(30000)}</p>
+                  </div>
+                  <div className="rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2">
+                    <p className="text-xs uppercase text-cyan-700">Paid</p>
+                    <p className="font-semibold text-cyan-700">
+                      {formatCurrency(selectedFeeRegistration.total_paid || 0)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2">
+                    <p className="text-xs uppercase text-rose-700">Pending</p>
+                    <p className="font-semibold text-rose-700">
+                      {formatCurrency(selectedFeeRegistration.pending_fee || 0)}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                    <p className="text-xs uppercase text-slate-700">Payments</p>
+                    <p className="font-semibold text-slate-700">{selectedFeeRegistration.payment_count || 0}</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-xl border border-slate-200 p-4">
+                  <h4 className="font-medium">Fee Plan</h4>
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <select
+                      value={feePlan}
+                      onChange={(event) =>
+                        setFeePlan(event.target.value as "monthly_3x" | "one_time")
+                      }
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                    >
+                      <option value="monthly_3x">Monthly (10k x 3)</option>
+                      <option value="one_time">One-time (30k)</option>
+                    </select>
+                    <button
+                      type="button"
+                      disabled={isSaving}
+                      onClick={handleFeePlanUpdate}
+                      className="rounded-xl bg-[#2b24ff] px-4 py-2 font-semibold text-white hover:bg-[#221bff] disabled:opacity-70"
+                    >
+                      Save Plan
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-xl border border-slate-200 p-4">
+                  <h4 className="font-medium">Add Payment Entry</h4>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                    <input
+                      type="number"
+                      min={1}
+                      value={paymentAmount}
+                      onChange={(event) => setPaymentAmount(event.target.value)}
+                      placeholder="Amount"
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                    />
+                    <input
+                      type="date"
+                      value={paymentDate}
+                      onChange={(event) => setPaymentDate(event.target.value)}
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                    />
+                    <input
+                      value={paymentNotes}
+                      onChange={(event) => setPaymentNotes(event.target.value)}
+                      placeholder="Notes (optional)"
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40 sm:col-span-2"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={handleAddPayment}
+                    className="mt-3 rounded-xl bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-700 disabled:opacity-70"
+                  >
+                    Add Payment
+                  </button>
+                </div>
+
+                <div className="mt-4 rounded-xl border border-slate-200">
+                  <div className="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700">
+                    Payment History
+                  </div>
+                  <div className="max-h-64 overflow-auto">
+                    {selectedFeeRegistration.payment_history?.length ? (
+                      <table className="min-w-full text-left text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-200 bg-white text-slate-700">
+                            <th className="px-3 py-2">Date</th>
+                            <th className="px-3 py-2">Amount</th>
+                            <th className="px-3 py-2">Notes</th>
+                            <th className="px-3 py-2">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedFeeRegistration.payment_history.map((payment) => (
+                            <tr key={payment.id} className="border-b border-slate-100 text-slate-700">
+                              <td className="px-3 py-2">{formatDate(payment.payment_date)}</td>
+                              <td className="px-3 py-2">{formatCurrency(payment.amount)}</td>
+                              <td className="px-3 py-2">{payment.notes || "-"}</td>
+                              <td className="px-3 py-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeletePayment(payment.id)}
+                                  className="rounded-md border border-red-200 p-2 text-red-600 hover:bg-red-50"
+                                >
+                                  <ActionIcon path="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <p className="px-4 py-6 text-center text-slate-500">No payment entries yet.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-5 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={closeFeeModal}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2 font-semibold hover:bg-slate-50"
+                  >
+                    Close
                   </button>
                 </div>
               </div>
