@@ -975,7 +975,7 @@ export default function FormsAdminPage() {
           </div>
         )}
 
-        <div className="mt-5 text-center text-sm">
+        <div className="mt-5 text-center text-sm hidden">
           <Link href="/forms" className="text-[#2b24ff] underline underline-offset-4">
             Back to Forms Dashboard
           </Link>

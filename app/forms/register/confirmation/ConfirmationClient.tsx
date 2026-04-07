@@ -7,12 +7,14 @@ import { useState } from "react";
 type ConfirmationClientProps = {
   regNo: string;
   studentName: string;
-  mode: "approved" | "under-review";
+  phoneNumber: string;
+  mode: "approved" | "under-review" | "already-registered";
 };
 
 export default function ConfirmationClient({
   regNo,
   studentName,
+  phoneNumber,
   mode,
 }: ConfirmationClientProps) {
   const [copied, setCopied] = useState(false);
@@ -24,6 +26,12 @@ If you're looking for the right career path or better opportunities, you should 
 Website: https://www.truequestlearning.com/
 WhatsApp: https://api.whatsapp.com/send/?phone=919778303913`;
   const forwardOnWhatsAppUrl = `https://wa.me/?text=${encodeURIComponent(invitationMessage)}`;
+  const adminWhatsAppNumber = "919778303913";
+  const contactAdminMessage =
+    mode === "already-registered"
+      ? `Hi TrueQuest Admin, I have already registered.\n\nName: ${studentName}\nRegistration Code: ${regNo}\nWhatsApp Number: ${phoneNumber}\n\nPlease assist me.`
+      : `Hi TrueQuest Admin, I submitted a new registration.\n\nName: ${studentName}\nWhatsApp Number: ${phoneNumber}\n\nPlease verify my details.`;
+  const contactAdminUrl = `https://wa.me/${adminWhatsAppNumber}?text=${encodeURIComponent(contactAdminMessage)}`;
 
   async function handleCopyInvite() {
     try {
@@ -36,7 +44,7 @@ WhatsApp: https://api.whatsapp.com/send/?phone=919778303913`;
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-[#221bff] via-[#2b24ff] to-[#3f37ff] text-white py-10 sm:py-16">
+    <main className="min-h-screen bg-linear-to-br from-[#221bff] via-[#2b24ff] to-[#3f37ff] py-10 text-white sm:py-16">
       <div className="mx-auto max-w-3xl px-4 sm:px-6 text-center">
         <Image
           src="/banner.png"
@@ -49,13 +57,29 @@ WhatsApp: https://api.whatsapp.com/send/?phone=919778303913`;
 
         <div className="mt-8 rounded-2xl border border-white/20 bg-white/10 p-6 sm:p-8 shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur-md">
           <h1 className="text-3xl sm:text-4xl font-bold">
-            {mode === "approved" ? "Admission completed! 🎉" : "Registration Received"}
+            {mode === "approved"
+              ? "Admission completed! 🎉"
+              : mode === "already-registered"
+                ? "You are already registered"
+                : "Registration Received"}
           </h1>
           {mode === "approved" ? (
             <>
               <p className="mt-4 text-white/90">Hi {studentName}, your admission is successful.</p>
               <p className="mt-5 text-xl font-semibold">
                 Reg No: <span className="text-lime-300">{regNo}</span>
+              </p>
+            </>
+          ) : mode === "already-registered" ? (
+            <>
+              <p className="mt-4 text-white/90">
+                Hi {studentName}, this number is already registered.
+              </p>
+              <p className="mt-5 text-xl font-semibold">
+                Reg No: <span className="text-lime-300">{regNo}</span>
+              </p>
+              <p className="mt-3 text-white/90">
+                Please contact admin on WhatsApp and share your registration code.
               </p>
             </>
           ) : (
@@ -77,12 +101,20 @@ WhatsApp: https://api.whatsapp.com/send/?phone=919778303913`;
                   to guide them in the right direction.
                 </p>
               </>
+            ) : mode === "already-registered" ? (
+              <>
+                <p>Your record already exists in our system.</p>
+                <p>
+                  Use the WhatsApp button below to contact admin. Your registration code is
+                  prefilled in the message.
+                </p>
+              </>
             ) : (
               <>
                 <p>Your details are saved and waiting for admin approval.</p>
                 <p>
-                  You will receive confirmation once approved and assigned a registration
-                  number.
+                  Use the WhatsApp button below to share your phone number with admin for
+                  faster follow-up.
                 </p>
               </>
             )}
@@ -104,6 +136,19 @@ WhatsApp: https://api.whatsapp.com/send/?phone=919778303913`;
                 className="rounded-xl bg-lime-400 px-4 py-2 font-semibold text-black hover:bg-lime-300"
               >
                 Forward on WhatsApp
+              </Link>
+            </div>
+          )}
+
+          {(mode === "under-review" || mode === "already-registered") && (
+            <div className="mt-8">
+              <Link
+                href={contactAdminUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex rounded-xl bg-lime-400 px-4 py-2 font-semibold text-black hover:bg-lime-300"
+              >
+                Contact Admin on WhatsApp
               </Link>
             </div>
           )}

@@ -55,6 +55,32 @@ function toDateInputValue(value: string | null | undefined): string {
   return parsedDate.toISOString().slice(0, 10);
 }
 
+function maskText(value: string | null | undefined): string {
+  const text = (value || "").trim();
+  if (!text) {
+    return "";
+  }
+  if (text.length <= 2) {
+    return "*".repeat(text.length);
+  }
+  return `${text.slice(0, 2)}${"*".repeat(Math.max(2, text.length - 2))}`;
+}
+
+function maskEmail(value: string | null | undefined): string {
+  const email = (value || "").trim();
+  if (!email || !email.includes("@")) {
+    return maskText(email);
+  }
+
+  const [localPart, domainPart] = email.split("@");
+  const maskedLocalPart =
+    localPart.length <= 2
+      ? `${localPart.charAt(0) || ""}*`
+      : `${localPart.slice(0, 2)}${"*".repeat(localPart.length - 2)}`;
+
+  return `${maskedLocalPart}@${domainPart}`;
+}
+
 export default function StudentRegistrationPage() {
   const router = useRouter();
   const [formData, setFormData] = useState<FormState>(defaultFormState);
@@ -117,9 +143,18 @@ export default function StudentRegistrationPage() {
       if (data.status === "already_registered") {
         const registration = data.registration;
         setIsAlreadyRegistered(true);
-        setFormData(buildFormStateFromRegistration(registration, phone));
+        setFormData({
+          ...buildFormStateFromRegistration(registration, phone),
+          emailId: maskEmail(registration.email_id),
+          courseSelected: "",
+          qualification: maskText(registration.qualification),
+          currentStatus: "",
+          lastInstitutionAttended: maskText(registration.last_institution_attended),
+          place: maskText(registration.place),
+          dateOfBirth: "",
+        });
         setPhoneInfoMessage(
-          `Already registered. Code: ${registration.reg_no}. To make changes, contact admin.`,
+          `Already registered. Code: ${registration.reg_no}. For compliance, only name and phone are shown. Contact admin for any updates.`,
         );
         setLastVerifiedPhone(phone);
         return;
@@ -170,14 +205,15 @@ export default function StudentRegistrationPage() {
       }
 
       if (data.status === "registered" || data.status === "already_registered") {
+        const mode = data.status === "already_registered" ? "already-registered" : "approved";
         router.push(
-          `/forms/register/confirmation?mode=approved&regNo=${encodeURIComponent(data.regNo)}&name=${encodeURIComponent(data.studentName)}`,
+          `/forms/register/confirmation?mode=${mode}&regNo=${encodeURIComponent(data.regNo)}&name=${encodeURIComponent(data.studentName)}&phone=${encodeURIComponent(formData.whatsappNumber)}`,
         );
         return;
       }
 
       router.push(
-        `/forms/register/confirmation?mode=under-review&name=${encodeURIComponent(data.studentName)}`,
+        `/forms/register/confirmation?mode=under-review&name=${encodeURIComponent(data.studentName)}&phone=${encodeURIComponent(formData.whatsappNumber)}`,
       );
     } catch (error: unknown) {
       setErrorMessage(getErrorMessage(error, "Something went wrong."));
@@ -393,7 +429,7 @@ export default function StudentRegistrationPage() {
           </button>
         </form>
 
-        <div className="mt-5 text-center text-sm">
+        <div className="mt-5 text-center text-sm hidden">
           <Link href="/forms" className="text-lime-300 underline underline-offset-4">
             Back to Forms Dashboard
           </Link>
