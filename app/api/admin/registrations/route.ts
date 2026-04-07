@@ -251,7 +251,32 @@ export async function GET(req: NextRequest) {
       whatsapp_number: string;
     }>;
 
-    return NextResponse.json({ registrations, allowlist, transactions }, { status: 200 });
+    await sql`
+      CREATE TABLE IF NOT EXISTS offer_enquiries (
+        id serial PRIMARY KEY,
+        name text NOT NULL,
+        phone_number text NOT NULL,
+        offer_type text NOT NULL,
+        created_at timestamptz DEFAULT now()
+      )
+    `;
+
+    const brochureRequests = (await sql`
+      SELECT id, name, phone_number, offer_type, created_at
+      FROM offer_enquiries
+      ORDER BY created_at DESC
+    `) as Array<{
+      id: number;
+      name: string;
+      phone_number: string;
+      offer_type: "HR" | "DIGITAL_MARKETING";
+      created_at: string;
+    }>;
+
+    return NextResponse.json(
+      { registrations, allowlist, transactions, brochureRequests },
+      { status: 200 },
+    );
   } catch (error) {
     console.error("Error fetching registrations:", error);
     return NextResponse.json(

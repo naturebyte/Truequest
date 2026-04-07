@@ -28,6 +28,14 @@ function LinkedInIcon() {
   );
 }
 
+function YouTubeIcon() {
+  return (
+    <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-[#ff0000] text-[11px] font-bold text-white">
+      ▶
+    </span>
+  );
+}
+
 function LocationIcon() {
   return (
     <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/10 text-xs">
@@ -46,6 +54,12 @@ function PhoneIcon() {
 
 export default function ComingSoon() {
   const [email, setEmail] = useState("");
+  const [isOfferModalOpen, setIsOfferModalOpen] = useState(false);
+  const [offerModalStep, setOfferModalStep] = useState<"details" | "brochure_form">("details");
+  const [selectedOffer, setSelectedOffer] = useState<"HR" | "DIGITAL_MARKETING" | null>(null);
+  const [offerLeadName, setOfferLeadName] = useState("");
+  const [offerPhoneNumber, setOfferPhoneNumber] = useState("");
+  const [isOfferSubmitting, setIsOfferSubmitting] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toast, setToast] = useState<{
     type: "success" | "info" | "error";
@@ -61,6 +75,104 @@ export default function ComingSoon() {
     const timeoutId = setTimeout(() => setToast(null), 4000);
     return () => clearTimeout(timeoutId);
   }, [toast]);
+
+  function openOfferModal(offerType: "HR" | "DIGITAL_MARKETING") {
+    setSelectedOffer(offerType);
+    setOfferModalStep("details");
+    setOfferLeadName("");
+    setOfferPhoneNumber("");
+    setIsOfferModalOpen(true);
+  }
+
+  function closeOfferModal() {
+    setIsOfferModalOpen(false);
+    setOfferModalStep("details");
+    setSelectedOffer(null);
+    setOfferLeadName("");
+    setOfferPhoneNumber("");
+  }
+
+  function getBrochurePath(offerType: "HR" | "DIGITAL_MARKETING"): string {
+    return offerType === "HR"
+      ? "/broshures/TrueQuest HR.pdf"
+      : "/broshures/TrueQuest HR.pdf";
+  }
+
+  function getOfferLabel(offerType: "HR" | "DIGITAL_MARKETING"): string {
+    return offerType === "HR" ? "HR" : "Digital Marketing";
+  }
+
+  function openBrochure(filePath: string) {
+    window.open(filePath, "_blank", "noopener,noreferrer");
+  }
+
+  async function handleOfferSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!selectedOffer) {
+      setToast({
+        type: "error",
+        message: "Please select an offer first.",
+      });
+      return;
+    }
+
+    const trimmedName = offerLeadName.trim();
+    const trimmedPhone = offerPhoneNumber.trim();
+    const normalizedPhone = trimmedPhone.replace(/\D/g, "");
+
+    if (!trimmedName || !trimmedPhone) {
+      setToast({
+        type: "error",
+        message: "Please enter your name and phone number.",
+      });
+      return;
+    }
+
+    if (normalizedPhone.length !== 10) {
+      setToast({
+        type: "error",
+        message: "Please enter a valid 10-digit phone number.",
+      });
+      return;
+    }
+
+    setIsOfferSubmitting(true);
+    try {
+      const response = await fetch("/api/offers", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: trimmedName,
+          phoneNumber: normalizedPhone,
+          offerType: selectedOffer,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "Unable to save your details.");
+      }
+
+      const brochurePath = getBrochurePath(selectedOffer);
+      openBrochure(brochurePath);
+
+      setToast({
+        type: "success",
+        message: `${getOfferLabel(selectedOffer)} details received. Opening brochure.`,
+      });
+      closeOfferModal();
+    } catch {
+      setToast({
+        type: "error",
+        message: "Unable to submit right now. Please try again.",
+      });
+    } finally {
+      setIsOfferSubmitting(false);
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -151,6 +263,26 @@ export default function ComingSoon() {
 
 
           <div className="space-y-3 max-w-xl mx-auto md:mx-0">
+            <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-2xl p-4 sm:p-5 shadow-[0_18px_50px_rgba(0,0,0,0.35)] space-y-3">
+              <p className="text-sm font-semibold text-white">What we offer</p>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  type="button"
+                  onClick={() => openOfferModal("HR")}
+                  className="px-4 py-3 rounded-xl bg-white text-[#1f17ff] font-semibold hover:bg-lime-300 transition w-full sm:w-auto shadow-md"
+                >
+                  HR (Human Resource)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openOfferModal("DIGITAL_MARKETING")}
+                  className="px-4 py-3 rounded-xl bg-white text-[#1f17ff] font-semibold hover:bg-lime-300 transition w-full sm:w-auto shadow-md"
+                >
+                  Digital Marketing
+                </button>
+              </div>
+            </div>
+
             <div className="bg-white/10 backdrop-blur-md border border-white/15 rounded-2xl p-3 sm:p-4 shadow-[0_18px_50px_rgba(0,0,0,0.35)]">
               <form
                 onSubmit={handleSubmit}
@@ -181,7 +313,14 @@ export default function ComingSoon() {
             <div className="flex flex-col gap-2">
               <div className="inline-flex items-center gap-2">
                 <LocationIcon />
-                <span> Sulthan Bathery, Wayanad</span>
+                <Link
+                  href="https://maps.app.goo.gl/n1m6JRndY7f8q4hP6?g_st=ic"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="underline decoration-white/40 underline-offset-4 hover:text-lime-300 hover:decoration-lime-300"
+                >
+                  WTC, Sulthan Bathery, Wayanad
+                </Link>
               </div>
               <div className="inline-flex items-center gap-2">
                 <PhoneIcon />
@@ -236,6 +375,15 @@ export default function ComingSoon() {
                   <LinkedInIcon />
                   <span>LinkedIn</span>
                 </Link>
+                <Link
+                  href="https://youtube.com/@truequestlearning?si=v8rq-EW8KFl4JGY2"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium hover:bg-white/20 transition"
+                >
+                  <YouTubeIcon />
+                  <span>YouTube</span>
+                </Link>
               </div>
             </div>
 
@@ -287,6 +435,114 @@ export default function ComingSoon() {
             }`}
           >
             {toast.message}
+          </div>
+        </div>
+      )}
+
+      {isOfferModalOpen && selectedOffer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="relative w-full max-w-md rounded-2xl border border-white/20 bg-[#2b24ff] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
+            <button
+              type="button"
+              onClick={closeOfferModal}
+              className="absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/15 text-lg text-white hover:bg-white/25 transition"
+              aria-label="Close popup"
+            >
+              ×
+            </button>
+            <div className="mb-4">
+              <h2 className="text-xl font-bold text-white">
+                {getOfferLabel(selectedOffer)} Course Details
+              </h2>
+              <p className="mt-1 text-sm text-white/80">Choose an option to continue.</p>
+            </div>
+
+            <div className="mb-4 rounded-xl border border-white/15 bg-white/10 p-4 text-sm text-white/90">
+              {selectedOffer === "DIGITAL_MARKETING" ? (
+                <>
+                  <p className="mb-3 leading-relaxed">
+                    Become job-ready with our industry-focused Digital Marketing training.
+                    Learn SEO, Social Media Marketing, Google Ads, Content Marketing and
+                    Live Project handling inside a corporate learning environment.
+                  </p>
+                  <ul className="space-y-1 text-white/90">
+                    <li>✔ 3 Month Job Ready Program</li>
+                    <li>✔ Industry Expert Training</li>
+                    <li>✔ Practical Live Projects</li>
+                    <li>✔ Placement Assistance</li>
+                    <li>✔ Corporate Learning Experience</li>
+                  </ul>
+                </>
+              ) : (
+                <>
+                  <p className="mb-3 leading-relaxed">
+                    Build a successful career in Human Resource Management with practical
+                    corporate training. Learn recruitment, payroll basics, employee
+                    management, labor law basics, and real workplace HR operations.
+                  </p>
+                  <ul className="space-y-1 text-white/90">
+                    <li>✔ Industry-Based Training</li>
+                    <li>✔ Practical HR Process Learning</li>
+                    <li>✔ Interview & Career Guidance</li>
+                    <li>✔ Corporate Learning Environment</li>
+                    <li>✔ Job Oriented Training</li>
+                  </ul>
+                </>
+              )}
+            </div>
+
+            {offerModalStep === "details" ? (
+              <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => window.open(whatsappHref, "_blank", "noopener,noreferrer")}
+                  className="px-4 py-3 rounded-xl bg-lime-400 text-black font-semibold hover:bg-lime-300 transition w-full"
+                >
+                  Contact now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOfferModalStep("brochure_form")}
+                  className="px-4 py-3 rounded-xl bg-white/15 text-white font-medium hover:bg-white/25 transition w-full"
+                >
+                  Get brochure
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleOfferSubmit} className="space-y-3">
+                <input
+                  type="text"
+                  placeholder="Your name"
+                  value={offerLeadName}
+                  onChange={(event) => setOfferLeadName(event.target.value)}
+                  className="px-4 py-3 rounded-xl w-full text-slate-900 placeholder:text-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-lime-400/80 shadow-sm"
+                />
+                <input
+                  type="tel"
+                  placeholder="Phone number"
+                  value={offerPhoneNumber}
+                  onChange={(event) => setOfferPhoneNumber(event.target.value)}
+                  className="px-4 py-3 rounded-xl w-full text-slate-900 placeholder:text-slate-400 bg-white focus:outline-none focus:ring-2 focus:ring-lime-400/80 shadow-sm"
+                />
+
+                <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setOfferModalStep("details")}
+                    className="px-4 py-3 rounded-xl bg-white/15 text-white font-medium hover:bg-white/25 transition w-full"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isOfferSubmitting}
+                    className="px-4 py-3 rounded-xl bg-lime-400 text-black font-semibold hover:bg-lime-300 transition w-full disabled:cursor-not-allowed disabled:opacity-80"
+                  >
+                    {isOfferSubmitting ? "Opening..." : "View brochure"}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

@@ -33,7 +33,7 @@ export default function FormsDashboardPage() {
           </Link>
 { process.env.NODE_ENV === "development" && (
           <Link
-            href="/forms/admin"
+            href="/admin"
             className="rounded-2xl border border-white/20 bg-white/10 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur-md transition hover:bg-white/20"
           >
             <p className="text-sm uppercase tracking-wide text-white/70">Admin Area</p>
