@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const ROOT_DOMAINS = new Set(["truequestlearning.com", "www.truequestlearning.com"]);
-const FORMS_SUBDOMAIN = "form.truequestlearning.com";
+const FORMS_SUBDOMAIN = "forms.truequestlearning.com";
 
 export function proxy(request: NextRequest) {
   const hostname = request.nextUrl.hostname.toLowerCase();
