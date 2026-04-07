@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "crypto";
+import nodemailer from "nodemailer";
 import {
   getAdminCookieName,
   getAdminSessionSecret,
@@ -26,6 +28,128 @@ function parseCourse(value: unknown): CourseSelection {
 function parseFeePlan(value: unknown): FeePlan {
   const feePlan = normalizeString(value);
   return feePlan === "one_time" ? "one_time" : "monthly_3x";
+}
+
+function getSmtpEncryptionSecret(): string {
+  return (process.env.SMTP_SETTINGS_SECRET || getAdminSessionSecret()).trim();
+}
+
+function isEncryptedSmtpPassword(value: string): boolean {
+  return value.startsWith("enc:v1:");
+}
+
+function encryptSmtpPassword(password: string): string {
+  const secret = getSmtpEncryptionSecret();
+  const iv = randomBytes(12);
+  const key = scryptSync(secret, "tq-smtp-password-salt", 32);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const encrypted = Buffer.concat([cipher.update(password, "utf8"), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+
+  return `enc:v1:${iv.toString("base64url")}:${authTag.toString("base64url")}:${encrypted.toString("base64url")}`;
+}
+
+function decryptSmtpPassword(value: string): string {
+  if (!isEncryptedSmtpPassword(value)) {
+    return value;
+  }
+
+  const parts = value.split(":");
+  if (parts.length !== 5) {
+    throw new Error("Invalid encrypted SMTP password format.");
+  }
+
+  const [, , ivPart, tagPart, encryptedPart] = parts;
+  const iv = Buffer.from(ivPart, "base64url");
+  const authTag = Buffer.from(tagPart, "base64url");
+  const encrypted = Buffer.from(encryptedPart, "base64url");
+  const key = scryptSync(getSmtpEncryptionSecret(), "tq-smtp-password-salt", 32);
+  const decipher = createDecipheriv("aes-256-gcm", key, iv);
+  decipher.setAuthTag(authTag);
+  const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+  return decrypted.toString("utf8");
+}
+
+function buildNotificationEmailHtml(nextBatchStartDate: string | null): string {
+  const nextBatchLabel = nextBatchStartDate
+    ? new Date(nextBatchStartDate).toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+    : "To be announced";
+
+  return `<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#eef2ff;font-family:Arial,sans-serif;color:#0f172a;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef2ff;padding:24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="640" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #c7d2fe;">
+            <tr>
+              <td style="background:linear-gradient(135deg,#221bff,#2b24ff,#3f37ff);padding:28px 28px 20px 28px;color:#ffffff;">
+                <div style="text-align:right;margin-bottom:8px;">
+                  <img src="https://truequestlearning.com/logo-emailer.png" alt="TrueQuest Learning Logo" width="56" height="56" style="display:inline-block;" />
+                </div>
+                <div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;opacity:.9;">TrueQuest Learning</div>
+                <h1 style="margin:8px 0 0 0;font-size:26px;line-height:1.25;">Thanks for your notification request</h1>
+                <p style="margin:10px 0 0 0;font-size:14px;line-height:1.6;opacity:.92;">
+                  We are excited to keep you updated on upcoming batches, admission announcements, and course launches.
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 28px;">
+                <div style="margin:0 0 14px 0;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+                  <img src="https://truequestlearning.com/banner-emailer.jpg" alt="TrueQuest Learning Banner" width="584" style="display:block;width:100%;height:auto;" />
+                </div>
+                <p style="margin:0 0 12px 0;font-size:14px;line-height:1.7;">Hi there,</p>
+                <p style="margin:0 0 12px 0;font-size:14px;line-height:1.7;">
+                  You are now on the TrueQuest notification list. We will notify you about:
+                </p>
+                <ul style="margin:0 0 16px 18px;padding:0;font-size:14px;line-height:1.8;">
+                  <li>Admission opening updates</li>
+                  <li>Batch schedules and start dates</li>
+                  <li>Course information and enrollment support</li>
+                </ul>
+                <p style="margin:0 0 12px 0;font-size:14px;line-height:1.7;">
+                  <strong>Next batch start:</strong> ${nextBatchLabel}
+                </p>
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:6px 0 18px 0;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;">
+                  <tr>
+                    <td style="padding:14px;">
+                      <div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:8px;">Need help right away?</div>
+                      <div style="font-size:13px;line-height:1.8;color:#334155;">
+                        Phone: +91 97470 03913 / +91 97470 03918<br/>
+                        Location: Sulthan Bathery, Wayanad
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+                <p style="margin:0 0 14px 0;font-size:13px;line-height:1.8;color:#334155;">
+                  For more details, visit our website:
+                  <a href="https://truequestlearning.com" style="color:#2b24ff;text-decoration:underline;">truequestlearning.com</a>
+                </p>
+                <p style="margin:0 0 14px 0;font-size:13px;line-height:1.8;color:#334155;">
+                  Follow us for regular updates:<br/>
+                  📸 <a href="https://www.instagram.com/truequestlearning" style="color:#2b24ff;text-decoration:underline;">Instagram</a> |
+                  👍 <a href="https://www.facebook.com/truequestlearning" style="color:#2b24ff;text-decoration:underline;">Facebook</a> |
+                  💼 <a href="https://www.linkedin.com/company/truequestlearning/" style="color:#2b24ff;text-decoration:underline;">LinkedIn</a> |
+                  ▶️ <a href="https://youtube.com/@truequestlearning?si=v8rq-EW8KFl4JGY2" style="color:#2b24ff;text-decoration:underline;">YouTube</a><br/>
+                  📍 <a href="https://maps.app.goo.gl/n1m6JRndY7f8q4hP6?g_st=ic" style="color:#2b24ff;text-decoration:underline;">Sulthan Bathery, Wayanad</a>
+                </p>
+                <p style="margin:18px 0 0 0;font-size:14px;line-height:1.7;">
+                  Regards,<br/>
+                  <strong>Team TrueQuest Learning</strong>
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
 }
 
 function getRegistrationNumber(course: CourseSelection, sequenceNumber: number): string {
@@ -113,6 +237,25 @@ async function ensureTables() {
       payment_date date NOT NULL,
       notes text,
       created_at timestamptz DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS smtp_settings (
+      id integer PRIMARY KEY,
+      host text,
+      port text,
+      username text,
+      password text,
+      updated_at timestamptz DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS admin_settings (
+      id integer PRIMARY KEY,
+      next_batch_start_date date,
+      updated_at timestamptz DEFAULT now()
     )
   `;
 }
@@ -277,22 +420,91 @@ export async function GET(req: NextRequest) {
       CREATE TABLE IF NOT EXISTS notify_emails (
         id serial PRIMARY KEY,
         email text UNIQUE NOT NULL,
-        created_at timestamptz DEFAULT now()
+        created_at timestamptz DEFAULT now(),
+        sent_count integer NOT NULL DEFAULT 0,
+        last_sent_at timestamptz
       )
     `;
 
+    await sql`
+      ALTER TABLE notify_emails
+      ADD COLUMN IF NOT EXISTS sent_count integer NOT NULL DEFAULT 0
+    `;
+
+    await sql`
+      ALTER TABLE notify_emails
+      ADD COLUMN IF NOT EXISTS last_sent_at timestamptz
+    `;
+
     const notificationRequestedUsers = (await sql`
-      SELECT id, email, created_at
+      SELECT id, email, created_at, sent_count, last_sent_at
       FROM notify_emails
       ORDER BY created_at DESC
     `) as Array<{
       id: number;
       email: string;
       created_at: string;
+      sent_count: number;
+      last_sent_at: string | null;
     }>;
 
+    const smtpRows = (await sql`
+      SELECT host, port, username, password
+      FROM smtp_settings
+      WHERE id = 1
+      LIMIT 1
+    `) as Array<{
+      host: string | null;
+      port: string | null;
+      username: string | null;
+      password: string | null;
+    }>;
+
+    const customSmtp = smtpRows[0];
+    const customPasswordValue = customSmtp?.password?.trim() || "";
+    const customPasswordResolved = customPasswordValue
+      ? decryptSmtpPassword(customPasswordValue)
+      : "";
+    const envHost = process.env.SMTP_HOST?.trim() || "";
+    const envPort = process.env.SMTP_PORT?.trim() || "";
+    const envUser = process.env.SMTP_USER?.trim() || "";
+    const envPassword = process.env.SMTP_PASSWORD?.trim() || "";
+    const hasCustom =
+      Boolean(customSmtp?.host?.trim()) ||
+      Boolean(customSmtp?.port?.trim()) ||
+      Boolean(customSmtp?.username?.trim()) ||
+      Boolean(customPasswordResolved);
+    const hasEnv = Boolean(envHost || envPort || envUser || envPassword);
+    const source: "custom" | "env" | "unset" = hasCustom ? "custom" : hasEnv ? "env" : "unset";
+
+    const smtpSettings = {
+      host: hasCustom ? customSmtp?.host?.trim() || "" : envHost,
+      port: hasCustom ? customSmtp?.port?.trim() || "" : envPort,
+      user: hasCustom ? customSmtp?.username?.trim() || "" : envUser,
+      source,
+      password_set: hasCustom
+        ? Boolean(customPasswordResolved)
+        : Boolean(envPassword),
+    };
+
+    const adminSettingsRows = (await sql`
+      SELECT next_batch_start_date
+      FROM admin_settings
+      WHERE id = 1
+      LIMIT 1
+    `) as Array<{ next_batch_start_date: string | null }>;
+    const nextBatchStartDate = adminSettingsRows[0]?.next_batch_start_date || null;
+
     return NextResponse.json(
-      { registrations, allowlist, transactions, brochureRequests, notificationRequestedUsers },
+      {
+        registrations,
+        allowlist,
+        transactions,
+        brochureRequests,
+        notificationRequestedUsers,
+        smtpSettings,
+        nextBatchStartDate,
+      },
       { status: 200 },
     );
   } catch (error) {
@@ -506,6 +718,180 @@ export async function PATCH(req: NextRequest) {
       await sql`
         INSERT INTO student_fee_payments (registration_id, amount, payment_date, notes)
         VALUES (${registrationId}, ${amount}, ${paymentDate}, ${notes || null})
+      `;
+
+      return NextResponse.json({ status: "ok" }, { status: 200 });
+    }
+
+    if (action === "smtp_update") {
+      const host = normalizeString(body.host);
+      const port = normalizeString(body.port);
+      const username = normalizeString(body.user);
+      const password = normalizeString(body.password);
+
+      if (!host || !port || !username) {
+        return NextResponse.json(
+          { error: "SMTP host, port and user are required for custom settings." },
+          { status: 400 },
+        );
+      }
+
+      const existingSmtpRows = (await sql`
+        SELECT password
+        FROM smtp_settings
+        WHERE id = 1
+        LIMIT 1
+      `) as Array<{ password: string | null }>;
+
+      const existingPassword = existingSmtpRows[0]?.password?.trim() || "";
+      const nextPassword = password
+        ? encryptSmtpPassword(password)
+        : existingPassword
+          ? isEncryptedSmtpPassword(existingPassword)
+            ? existingPassword
+            : encryptSmtpPassword(existingPassword)
+          : "";
+
+      await sql`
+        INSERT INTO smtp_settings (id, host, port, username, password, updated_at)
+        VALUES (1, ${host}, ${port}, ${username}, ${nextPassword || null}, now())
+        ON CONFLICT (id) DO UPDATE SET
+          host = EXCLUDED.host,
+          port = EXCLUDED.port,
+          username = EXCLUDED.username,
+          password = EXCLUDED.password,
+          updated_at = now()
+      `;
+
+      return NextResponse.json({ status: "ok" }, { status: 200 });
+    }
+
+    if (action === "smtp_reset") {
+      await sql`DELETE FROM smtp_settings WHERE id = 1`;
+      return NextResponse.json({ status: "ok" }, { status: 200 });
+    }
+
+    if (action === "next_batch_update") {
+      const nextBatchStartDateRaw = normalizeString(body.nextBatchStartDate);
+      if (!nextBatchStartDateRaw) {
+        await sql`
+          INSERT INTO admin_settings (id, next_batch_start_date, updated_at)
+          VALUES (1, NULL, now())
+          ON CONFLICT (id) DO UPDATE SET
+            next_batch_start_date = NULL,
+            updated_at = now()
+        `;
+        return NextResponse.json({ status: "ok" }, { status: 200 });
+      }
+
+      const validDate = /^\d{4}-\d{2}-\d{2}$/.test(nextBatchStartDateRaw);
+      if (!validDate) {
+        return NextResponse.json({ error: "Invalid date format." }, { status: 400 });
+      }
+
+      await sql`
+        INSERT INTO admin_settings (id, next_batch_start_date, updated_at)
+        VALUES (1, ${nextBatchStartDateRaw}, now())
+        ON CONFLICT (id) DO UPDATE SET
+          next_batch_start_date = EXCLUDED.next_batch_start_date,
+          updated_at = now()
+      `;
+
+      return NextResponse.json({ status: "ok" }, { status: 200 });
+    }
+
+    if (action === "notification_send_email") {
+      const targetEmail = normalizeString(body.email).toLowerCase();
+      if (!targetEmail || !targetEmail.includes("@")) {
+        return NextResponse.json({ error: "Valid email is required." }, { status: 400 });
+      }
+
+      const smtpRows = (await sql`
+        SELECT host, port, username, password
+        FROM smtp_settings
+        WHERE id = 1
+        LIMIT 1
+      `) as Array<{
+        host: string | null;
+        port: string | null;
+        username: string | null;
+        password: string | null;
+      }>;
+
+      const customSmtp = smtpRows[0];
+      const customPassword = customSmtp?.password?.trim()
+        ? decryptSmtpPassword(customSmtp.password.trim())
+        : "";
+      const hasCustom =
+        Boolean(customSmtp?.host?.trim()) &&
+        Boolean(customSmtp?.port?.trim()) &&
+        Boolean(customSmtp?.username?.trim()) &&
+        Boolean(customPassword);
+
+      const smtpHost = hasCustom
+        ? customSmtp?.host?.trim() || ""
+        : process.env.SMTP_HOST?.trim() || "";
+      const smtpPortRaw = hasCustom
+        ? customSmtp?.port?.trim() || ""
+        : process.env.SMTP_PORT?.trim() || "";
+      const smtpUser = hasCustom
+        ? customSmtp?.username?.trim() || ""
+        : process.env.SMTP_USER?.trim() || "";
+      const smtpPassword = hasCustom ? customPassword : process.env.SMTP_PASSWORD?.trim() || "";
+      const smtpPort = Number(smtpPortRaw);
+      const adminSettingsRows = (await sql`
+        SELECT next_batch_start_date
+        FROM admin_settings
+        WHERE id = 1
+        LIMIT 1
+      `) as Array<{ next_batch_start_date: string | null }>;
+      const nextBatchStartDate = adminSettingsRows[0]?.next_batch_start_date || null;
+
+      if (!smtpHost || !smtpPort || !smtpUser || !smtpPassword) {
+        return NextResponse.json(
+          { error: "SMTP is not configured. Set custom SMTP or .env defaults first." },
+          { status: 400 },
+        );
+      }
+
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpPort === 465,
+        auth: {
+          user: smtpUser,
+          pass: smtpPassword,
+        },
+      });
+
+      const subject = "TrueQuest Learning | Launch updates and next steps";
+      const text = [
+        "Hi,",
+        "",
+        "Thank you for requesting notifications from TrueQuest Learning.",
+        "",
+        "We will keep you updated on admission openings, batch schedules, and course launches.",
+        "",
+        "Contact:",
+        "Location: Sulthan Bathery, Wayanad",
+        "Phone: +91 97470 03913 / +91 97470 03918",
+        "",
+        "Regards,",
+        "Team TrueQuest Learning",
+      ].join("\n");
+
+      await transporter.sendMail({
+        from: smtpUser,
+        to: targetEmail,
+        subject,
+        text,
+        html: buildNotificationEmailHtml(nextBatchStartDate),
+      });
+
+      await sql`
+        UPDATE notify_emails
+        SET sent_count = COALESCE(sent_count, 0) + 1, last_sent_at = now()
+        WHERE email = ${targetEmail}
       `;
 
       return NextResponse.json({ status: "ok" }, { status: 200 });

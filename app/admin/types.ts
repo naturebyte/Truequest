@@ -67,4 +67,14 @@ export type NotificationRequestRecord = {
   id: number;
   email: string;
   created_at: string;
+  sent_count: number;
+  last_sent_at: string | null;
+};
+
+export type SmtpSettings = {
+  host: string;
+  port: string;
+  user: string;
+  source: "custom" | "env" | "unset";
+  password_set: boolean;
 };

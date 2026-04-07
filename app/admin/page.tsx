@@ -13,6 +13,7 @@ import type {
   FeeTransaction,
   NotificationRequestRecord,
   RegistrationRecord,
+  SmtpSettings,
 } from "./types";
 import {
   formatCurrency,
@@ -109,6 +110,21 @@ export default function FormsAdminPage() {
   const [paymentAmount, setPaymentAmount] = useState("10000");
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
   const [paymentNotes, setPaymentNotes] = useState("");
+  const [smtpSettings, setSmtpSettings] = useState<SmtpSettings>({
+    host: "",
+    port: "",
+    user: "",
+    source: "unset",
+    password_set: false,
+  });
+  const [smtpHostInput, setSmtpHostInput] = useState("");
+  const [smtpPortInput, setSmtpPortInput] = useState("");
+  const [smtpUserInput, setSmtpUserInput] = useState("");
+  const [smtpPasswordInput, setSmtpPasswordInput] = useState("");
+  const [nextBatchStartDate, setNextBatchStartDate] = useState("");
+  const [nextBatchStartDateInput, setNextBatchStartDateInput] = useState("");
+  const [smtpInfoMessage, setSmtpInfoMessage] = useState("");
+  const [sendingNotificationEmail, setSendingNotificationEmail] = useState<string | null>(null);
 
   async function fetchRegistrations() {
     const response = await fetch("/api/admin/registrations");
@@ -127,6 +143,21 @@ export default function FormsAdminPage() {
     setTransactions(data.transactions || []);
     setBrochureRequests(data.brochureRequests || []);
     setNotificationRequestedUsers(data.notificationRequestedUsers || []);
+    setSmtpSettings(
+      data.smtpSettings || {
+        host: "",
+        port: "",
+        user: "",
+        source: "unset",
+        password_set: false,
+      },
+    );
+    setSmtpHostInput(data.smtpSettings?.host || "");
+    setSmtpPortInput(data.smtpSettings?.port || "");
+    setSmtpUserInput(data.smtpSettings?.user || "");
+    setSmtpPasswordInput("");
+    setNextBatchStartDate(data.nextBatchStartDate || "");
+    setNextBatchStartDateInput(data.nextBatchStartDate || "");
     setIsAuthenticated(true);
   }
 
@@ -176,6 +207,115 @@ export default function FormsAdminPage() {
       setErrorMessage(getErrorMessage(error, "Unable to sync latest data."));
     } finally {
       setIsRefreshing(false);
+    }
+  }
+
+  async function handleSmtpSave() {
+    setErrorMessage("");
+    setSmtpInfoMessage("");
+    setIsSaving(true);
+
+    try {
+      const response = await fetch("/api/admin/registrations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "smtp_update",
+          host: smtpHostInput,
+          port: smtpPortInput,
+          user: smtpUserInput,
+          password: smtpPasswordInput,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "Unable to save SMTP settings.");
+      }
+
+      setSmtpInfoMessage("SMTP custom settings saved.");
+      setSmtpPasswordInput("");
+      await fetchRegistrations();
+    } catch (error: unknown) {
+      setErrorMessage(getErrorMessage(error, "Unable to save SMTP settings."));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleSmtpResetToEnv() {
+    setErrorMessage("");
+    setSmtpInfoMessage("");
+    setIsSaving(true);
+
+    try {
+      const response = await fetch("/api/admin/registrations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "smtp_reset" }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "Unable to reset SMTP settings.");
+      }
+
+      setSmtpInfoMessage("Custom SMTP removed. Using .env defaults if available.");
+      setSmtpPasswordInput("");
+      await fetchRegistrations();
+    } catch (error: unknown) {
+      setErrorMessage(getErrorMessage(error, "Unable to reset SMTP settings."));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleSendNotificationEmail(email: string) {
+    setErrorMessage("");
+    setSmtpInfoMessage("");
+    setSendingNotificationEmail(email);
+
+    try {
+      const response = await fetch("/api/admin/registrations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "notification_send_email", email }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "Unable to send email.");
+      }
+      setSmtpInfoMessage(`Notification email sent to ${email}.`);
+    } catch (error: unknown) {
+      setErrorMessage(getErrorMessage(error, "Unable to send email."));
+    } finally {
+      setSendingNotificationEmail(null);
+    }
+  }
+
+  async function handleNextBatchDateSave() {
+    setErrorMessage("");
+    setSmtpInfoMessage("");
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/admin/registrations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "next_batch_update",
+          nextBatchStartDate: nextBatchStartDateInput,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "Unable to save next batch date.");
+      }
+      setSmtpInfoMessage("Next batch start date saved.");
+      await fetchRegistrations();
+    } catch (error: unknown) {
+      setErrorMessage(getErrorMessage(error, "Unable to save next batch date."));
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -887,6 +1027,102 @@ export default function FormsAdminPage() {
                 </div>
               </div>
 
+              <div className="mt-5 rounded-xl border border-slate-200 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-base font-semibold">SMTP Settings</h3>
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+                    Source: {smtpSettings.source === "custom" ? "Admin Custom" : smtpSettings.source === "env" ? ".env Default" : "Not Set"}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-slate-600">
+                  Configure custom SMTP credentials here. If removed, system will automatically use
+                  `.env` values (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`).
+                </p>
+                <p className="mt-1 text-sm text-slate-600">
+                  Current next batch start date: {nextBatchStartDate ? formatDate(nextBatchStartDate) : "Not set"}
+                </p>
+
+                {smtpInfoMessage && (
+                  <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                    {smtpInfoMessage}
+                  </p>
+                )}
+
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <input
+                    value={smtpHostInput}
+                    onChange={(event) => setSmtpHostInput(event.target.value)}
+                    placeholder="SMTP Host"
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                  />
+                  <input
+                    value={smtpPortInput}
+                    onChange={(event) => setSmtpPortInput(event.target.value)}
+                    placeholder="SMTP Port"
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                  />
+                  <input
+                    value={smtpUserInput}
+                    onChange={(event) => setSmtpUserInput(event.target.value)}
+                    placeholder="SMTP User"
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                  />
+                  <input
+                    type="password"
+                    value={smtpPasswordInput}
+                    onChange={(event) => setSmtpPasswordInput(event.target.value)}
+                    placeholder={
+                      smtpSettings.password_set
+                        ? "SMTP Password (leave empty to keep existing)"
+                        : "SMTP Password"
+                    }
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                  />
+                </div>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSmtpSave}
+                    disabled={isSaving}
+                    className="rounded-xl bg-[#2b24ff] px-4 py-2 text-sm font-semibold text-white hover:bg-[#221bff] disabled:opacity-70"
+                  >
+                    Save SMTP
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSmtpResetToEnv}
+                    disabled={isSaving}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-70"
+                  >
+                    Reset to .env
+                  </button>
+                </div>
+
+                <div className="mt-5 border-t border-slate-200 pt-4">
+                  <h4 className="text-sm font-semibold text-slate-800">Next Batch Start Date</h4>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Used automatically in notification emails when Send/Resend is clicked.
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <input
+                      type="date"
+                      value={nextBatchStartDateInput}
+                      onChange={(event) => setNextBatchStartDateInput(event.target.value)}
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleNextBatchDateSave}
+                      disabled={isSaving}
+                      className="rounded-xl bg-[#2b24ff] px-4 py-2 text-sm font-semibold text-white hover:bg-[#221bff] disabled:opacity-70"
+                    >
+                      Save Date
+                    </button>
+                  </div>
+                </div>
+              </div>
+
             </section>
             )}
 
@@ -1000,6 +1236,8 @@ export default function FormsAdminPage() {
                         <tr className="border-b border-slate-200 bg-slate-50 text-slate-700">
                           <th className="px-3 py-2">Email</th>
                           <th className="px-3 py-2">Requested On</th>
+                          <th className="px-3 py-2">Email Status</th>
+                          <th className="px-3 py-2">Action</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1007,11 +1245,35 @@ export default function FormsAdminPage() {
                           <tr key={user.id} className="border-b border-slate-100 text-slate-700">
                             <td className="px-3 py-2">{user.email}</td>
                             <td className="px-3 py-2">{formatDate(user.created_at)}</td>
+                            <td className="px-3 py-2">
+                              {user.sent_count > 0 ? (
+                                <span className="text-emerald-700">
+                                  Sent {user.sent_count} time{user.sent_count > 1 ? "s" : ""}
+                                  {user.last_sent_at ? ` (last: ${formatDate(user.last_sent_at)})` : ""}
+                                </span>
+                              ) : (
+                                <span className="text-amber-700">Not sent yet</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              <button
+                                type="button"
+                                onClick={() => void handleSendNotificationEmail(user.email)}
+                                disabled={sendingNotificationEmail === user.email}
+                                className="inline-flex rounded-lg border border-[#2b24ff]/20 bg-[#2b24ff]/10 px-3 py-1.5 text-xs font-medium text-[#2b24ff] hover:bg-[#2b24ff]/15"
+                              >
+                                {sendingNotificationEmail === user.email
+                                  ? "Sending..."
+                                  : user.sent_count > 0
+                                    ? "Resend"
+                                    : "Send Email"}
+                              </button>
+                            </td>
                           </tr>
                         ))}
                         {notificationRequestedUsers.length === 0 && (
                           <tr>
-                            <td colSpan={2} className="px-3 py-5 text-center text-slate-500">
+                            <td colSpan={4} className="px-3 py-5 text-center text-slate-500">
                               No notification requests yet.
                             </td>
                           </tr>
