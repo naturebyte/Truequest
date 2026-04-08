@@ -5,7 +5,7 @@ import { createDecipheriv, scryptSync } from "crypto";
 
 type CourseSelection = "DM" | "HR" | null;
 type ReviewStatus = "approved" | "under_review";
-const REGISTRATION_NUMBER_BASE = 500;
+const REGISTRATION_NUMBER_BASE = 786;
 
 function normalizeString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";

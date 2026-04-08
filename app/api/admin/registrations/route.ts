@@ -9,7 +9,7 @@ import {
 
 type CourseSelection = "DM" | "HR" | null;
 type FeePlan = "monthly_3x" | "one_time";
-const REGISTRATION_NUMBER_BASE = 500;
+const REGISTRATION_NUMBER_BASE = 786;
 
 function normalizeString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
