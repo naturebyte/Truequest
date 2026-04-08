@@ -103,8 +103,8 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
   const [paymentRemindersPage, setPaymentRemindersPage] = useState(1);
   const [transactionsPage, setTransactionsPage] = useState(1);
   const [paymentHistoryPage, setPaymentHistoryPage] = useState(1);
-  const [, setActiveTab] = useState<AdminTab>("overview");
-  const currentTab = forcedTab ?? "overview";
+  const [activeTab, setActiveTab] = useState<AdminTab>(forcedTab ?? "overview");
+  const currentTab = activeTab;
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isFeeModalOpen, setIsFeeModalOpen] = useState(false);
@@ -878,7 +878,7 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
               activeTab={currentTab}
               onTabChange={setActiveTab}
               onLogout={handleLogout}
-              useRouteNavigation
+              useRouteNavigation={false}
             />
 
             <div className="space-y-6">
