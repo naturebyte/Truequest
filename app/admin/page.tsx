@@ -113,6 +113,9 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
   const [paymentAmount, setPaymentAmount] = useState("10000");
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
   const [paymentNotes, setPaymentNotes] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<"bank_transfer" | "upi" | "cash" | "card_payment">(
+    "bank_transfer",
+  );
   const [smtpSettings, setSmtpSettings] = useState<SmtpSettings>({
     host: "",
     port: "",
@@ -615,6 +618,7 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
           registrationId: selectedFeeRegistration.id,
           amount: Number(paymentAmount),
           paymentDate,
+          paymentMethod,
           notes: paymentNotes,
         }),
       });
@@ -2112,7 +2116,7 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
 
                 <div className="mt-4 rounded-xl border border-slate-200 p-4">
                   <h4 className="font-medium">Add Payment Entry</h4>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-4">
+                  <div className="mt-3 grid gap-3 sm:grid-cols-5">
                     <input
                       type="number"
                       min={1}
@@ -2127,6 +2131,20 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                       onChange={(event) => setPaymentDate(event.target.value)}
                       className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
                     />
+                    <select
+                      value={paymentMethod}
+                      onChange={(event) =>
+                        setPaymentMethod(
+                          event.target.value as "bank_transfer" | "upi" | "cash" | "card_payment",
+                        )
+                      }
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                    >
+                      <option value="bank_transfer">Bank Transfer</option>
+                      <option value="upi">UPI</option>
+                      <option value="cash">Cash</option>
+                      <option value="card_payment">Card Payment</option>
+                    </select>
                     <input
                       value={paymentNotes}
                       onChange={(event) => setPaymentNotes(event.target.value)}

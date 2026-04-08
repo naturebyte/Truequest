@@ -383,9 +383,15 @@ async function ensureTables() {
       registration_id integer NOT NULL REFERENCES student_registrations(id) ON DELETE CASCADE,
       amount integer NOT NULL CHECK (amount > 0),
       payment_date date NOT NULL,
+      payment_method text,
       notes text,
       created_at timestamptz DEFAULT now()
     )
+  `;
+
+  await sql`
+    ALTER TABLE student_fee_payments
+    ADD COLUMN IF NOT EXISTS payment_method text
   `;
 
   await sql`
@@ -438,6 +444,7 @@ export async function GET(req: NextRequest) {
             json_agg(
               json_build_object(
                 'id', id,
+                'payment_method', payment_method,
                 'amount', amount,
                 'payment_date', payment_date,
                 'notes', notes,
@@ -497,6 +504,7 @@ export async function GET(req: NextRequest) {
       payment_count: number;
       payment_history: Array<{
         id: number;
+        payment_method: string | null;
         amount: number;
         payment_date: string;
         notes: string | null;
@@ -521,6 +529,7 @@ export async function GET(req: NextRequest) {
         student_fee_payments.registration_id,
         student_fee_payments.amount,
         student_fee_payments.payment_date,
+        student_fee_payments.payment_method,
         student_fee_payments.notes,
         student_fee_payments.created_at,
         student_registrations.reg_no,
@@ -535,6 +544,7 @@ export async function GET(req: NextRequest) {
       registration_id: number;
       amount: number;
       payment_date: string;
+      payment_method: string | null;
       notes: string | null;
       created_at: string;
       reg_no: string | null;
@@ -1018,6 +1028,9 @@ export async function PATCH(req: NextRequest) {
       const amount = Number(body.amount);
       const paymentDate = normalizeString(body.paymentDate);
       const notes = normalizeString(body.notes);
+      const paymentMethodRaw = normalizeString(body.paymentMethod).toLowerCase();
+      const allowedMethods = new Set(["bank_transfer", "upi", "cash", "card_payment"]);
+      const paymentMethod = allowedMethods.has(paymentMethodRaw) ? paymentMethodRaw : "cash";
 
       if (!registrationId || !amount || !paymentDate) {
         return NextResponse.json(
@@ -1031,8 +1044,8 @@ export async function PATCH(req: NextRequest) {
       }
 
       await sql`
-        INSERT INTO student_fee_payments (registration_id, amount, payment_date, notes)
-        VALUES (${registrationId}, ${amount}, ${paymentDate}, ${notes || null})
+        INSERT INTO student_fee_payments (registration_id, amount, payment_date, payment_method, notes)
+        VALUES (${registrationId}, ${amount}, ${paymentDate}, ${paymentMethod}, ${notes || null})
       `;
 
       return NextResponse.json({ status: "ok" }, { status: 200 });
