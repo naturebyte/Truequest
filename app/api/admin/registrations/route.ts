@@ -81,6 +81,29 @@ function buildNotificationEmailHtml(nextBatchStartDate: string | null): string {
 
   return `<!doctype html>
 <html>
+  <head>
+    <meta name="color-scheme" content="light only" />
+    <meta name="supported-color-schemes" content="light" />
+    <style>
+      .tq-header-title,
+      .tq-header-subtitle {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+      }
+      @media (prefers-color-scheme: dark) {
+        .tq-header-title,
+        .tq-header-subtitle {
+          color: #ffffff !important;
+          -webkit-text-fill-color: #ffffff !important;
+        }
+      }
+      [data-ogsc] .tq-header-title,
+      [data-ogsc] .tq-header-subtitle {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+      }
+    </style>
+  </head>
   <body style="margin:0;padding:0;background:#eef2ff;font-family:Arial,sans-serif;color:#0f172a;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef2ff;padding:24px 12px;">
       <tr>
@@ -92,8 +115,8 @@ function buildNotificationEmailHtml(nextBatchStartDate: string | null): string {
                   <img src="https://truequestlearning.com/logo-emailer.png" alt="TrueQuest Learning Logo" width="56" height="56" style="display:inline-block;" />
                 </div>
                 <div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;opacity:.9;">TrueQuest Learning</div>
-                <h1 style="margin:8px 0 0 0;font-size:26px;line-height:1.25;">Thanks for your notification request</h1>
-                <p style="margin:10px 0 0 0;font-size:14px;line-height:1.6;opacity:.92;">
+                <h1 class="tq-header-title" style="margin:8px 0 0 0;font-size:26px;line-height:1.25;color:#ffffff !important;-webkit-text-fill-color:#ffffff !important;">Thanks for your notification request</h1>
+                <p class="tq-header-subtitle" style="margin:10px 0 0 0;font-size:14px;line-height:1.6;opacity:.92;color:#ffffff !important;-webkit-text-fill-color:#ffffff !important;">
                   We are excited to keep you updated on upcoming batches, admission announcements, and course launches.
                 </p>
               </td>

@@ -333,7 +333,7 @@ export default function StudentRegistrationPage() {
               onChange={(event) =>
                 setFormData({ ...formData, dateOfBirth: event.target.value })
               }
-              className="w-full rounded-xl bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-lime-400/80"
+              className="w-full h-12 appearance-none rounded-xl bg-white px-4 text-slate-900 outline-none focus:ring-2 focus:ring-lime-400/80"
             />
           </label>
 

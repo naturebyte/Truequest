@@ -86,6 +86,29 @@ function buildRegistrationCongratsHtml({
 
   return `<!doctype html>
 <html>
+  <head>
+    <meta name="color-scheme" content="light only" />
+    <meta name="supported-color-schemes" content="light" />
+    <style>
+      .tq-header-title,
+      .tq-header-subtitle {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+      }
+      @media (prefers-color-scheme: dark) {
+        .tq-header-title,
+        .tq-header-subtitle {
+          color: #ffffff !important;
+          -webkit-text-fill-color: #ffffff !important;
+        }
+      }
+      [data-ogsc] .tq-header-title,
+      [data-ogsc] .tq-header-subtitle {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+      }
+    </style>
+  </head>
   <body style="margin:0;padding:0;background:#eef2ff;font-family:Arial,sans-serif;color:#0f172a;">
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef2ff;padding:24px 12px;">
       <tr>
@@ -102,8 +125,8 @@ function buildRegistrationCongratsHtml({
                     style="display:inline-block;"
                   />
                 </div>
-                <h1 style="margin:0;font-size:26px;line-height:1.3;">Congratulations! Registration Confirmed</h1>
-                <p style="margin:10px 0 0 0;font-size:14px;line-height:1.6;opacity:.94;">
+                <h1 class="tq-header-title" style="margin:0;font-size:26px;line-height:1.3;color:#ffffff !important;-webkit-text-fill-color:#ffffff !important;">Congratulations! Registration Confirmed</h1>
+                <p class="tq-header-subtitle" style="margin:10px 0 0 0;font-size:14px;line-height:1.6;opacity:.94;color:#ffffff !important;-webkit-text-fill-color:#ffffff !important;">
                   Welcome to TrueQuest Learning. Your admission is successfully registered.
                 </p>
               </td>

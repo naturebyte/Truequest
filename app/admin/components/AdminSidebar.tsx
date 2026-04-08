@@ -1,9 +1,11 @@
+import Link from "next/link";
 import type { AdminTab } from "../types";
 
 type AdminSidebarProps = {
   activeTab: AdminTab;
   onTabChange: (tab: AdminTab) => void;
   onLogout: () => void | Promise<void>;
+  useRouteNavigation?: boolean;
 };
 
 const tabs: Array<{ id: AdminTab; label: string }> = [
@@ -14,25 +16,44 @@ const tabs: Array<{ id: AdminTab; label: string }> = [
   { id: "brochure_requests", label: "Brochure Requests" },
 ];
 
-export function AdminSidebar({ activeTab, onTabChange, onLogout }: AdminSidebarProps) {
+export function AdminSidebar({
+  activeTab,
+  onTabChange,
+  onLogout,
+  useRouteNavigation = false,
+}: AdminSidebarProps) {
   return (
     <aside className="flex h-full self-stretch rounded-2xl border border-slate-200 bg-white p-4 shadow-xl lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)] lg:flex-col">
       <h2 className="text-lg font-semibold">Admin Pages</h2>
       <p className="mt-1 text-sm text-slate-600">Select a page to view only that content.</p>
       <nav className="mt-4 space-y-2 lg:flex-1 lg:overflow-y-auto lg:pr-1">
         {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => onTabChange(tab.id)}
-            className={`block w-full rounded-lg border px-3 py-2 text-left text-sm ${
-              activeTab === tab.id
-                ? "border-[#2b24ff]/30 bg-[#2b24ff]/10 text-[#2b24ff]"
-                : "border-slate-200 bg-white hover:bg-slate-50"
-            }`}
-          >
-            {tab.label}
-          </button>
+          useRouteNavigation ? (
+            <Link
+              key={tab.id}
+              href={`/admin/${tab.id}`}
+              className={`block w-full rounded-lg border px-3 py-2 text-left text-sm ${
+                activeTab === tab.id
+                  ? "border-[#2b24ff]/30 bg-[#2b24ff]/10 text-[#2b24ff]"
+                  : "border-slate-200 bg-white hover:bg-slate-50"
+              }`}
+            >
+              {tab.label}
+            </Link>
+          ) : (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => onTabChange(tab.id)}
+              className={`block w-full rounded-lg border px-3 py-2 text-left text-sm ${
+                activeTab === tab.id
+                  ? "border-[#2b24ff]/30 bg-[#2b24ff]/10 text-[#2b24ff]"
+                  : "border-slate-200 bg-white hover:bg-slate-50"
+              }`}
+            >
+              {tab.label}
+            </button>
+          )
         ))}
       </nav>
       <button

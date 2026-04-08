@@ -61,7 +61,7 @@ function PaginationControls({
   );
 }
 
-export default function FormsAdminPage() {
+export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } = {}) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -102,7 +102,9 @@ export default function FormsAdminPage() {
   const [paymentRemindersPage, setPaymentRemindersPage] = useState(1);
   const [transactionsPage, setTransactionsPage] = useState(1);
   const [paymentHistoryPage, setPaymentHistoryPage] = useState(1);
-  const [activeTab, setActiveTab] = useState<AdminTab>("overview");
+  const [, setActiveTab] = useState<AdminTab>("overview");
+  const currentTab = forcedTab ?? "overview";
+
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isFeeModalOpen, setIsFeeModalOpen] = useState(false);
   const [selectedFeeRegistration, setSelectedFeeRegistration] = useState<RegistrationRecord | null>(null);
@@ -856,7 +858,12 @@ export default function FormsAdminPage() {
           />
         ) : (
           <div className="grid min-h-[calc(100vh-12rem)] gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
-            <AdminSidebar activeTab={activeTab} onTabChange={setActiveTab} onLogout={handleLogout} />
+            <AdminSidebar
+              activeTab={currentTab}
+              onTabChange={setActiveTab}
+              onLogout={handleLogout}
+              useRouteNavigation
+            />
 
             <div className="space-y-6">
             <div className="flex items-center justify-between">
@@ -874,7 +881,7 @@ export default function FormsAdminPage() {
                 />
               </button>
             </div>
-            {activeTab === "overview" && (
+            {currentTab === "overview" && (
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
@@ -1126,7 +1133,7 @@ export default function FormsAdminPage() {
             </section>
             )}
 
-            {activeTab === "brochure_requests" && (
+            {currentTab === "brochure_requests" && (
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
                 <h2 className="text-2xl font-semibold">
                   Brochure Requests ({brochureRequests.length})
@@ -1297,7 +1304,7 @@ export default function FormsAdminPage() {
               </section>
             )}
 
-            {activeTab === "fees" && (
+            {currentTab === "fees" && (
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
                 <div className="mb-4">
                   <h2 className="text-xl font-semibold">Fee Management</h2>
@@ -1503,7 +1510,7 @@ export default function FormsAdminPage() {
               </section>
             )}
 
-            {activeTab === "allowlist" && (
+            {currentTab === "allowlist" && (
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">Allowed Students ({allowlist.length})</h2>
@@ -1607,7 +1614,7 @@ export default function FormsAdminPage() {
             </section>
             )}
 
-            {activeTab === "registrations" && (
+            {currentTab === "registrations" && (
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <h2 className="text-xl font-semibold">
