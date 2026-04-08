@@ -77,10 +77,6 @@ async function main() {
     "student_registrations",
     // fee management
     "student_fee_payments",
-    // brochure requests
-    "offer_enquiries",
-    // notification requests
-    "notify_emails",
   ];
 
   for (const table of tablesToReset) {

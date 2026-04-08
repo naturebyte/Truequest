@@ -189,6 +189,121 @@ function buildRegistrationCongratsHtml({
 </html>`;
 }
 
+function buildRegistrationUnderReviewHtml({
+  studentName,
+  nextBatchStartDate,
+}: {
+  studentName: string;
+  nextBatchStartDate: string | null;
+}): string {
+  const nextBatchLabel = nextBatchStartDate
+    ? new Date(nextBatchStartDate).toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+    : "To be announced";
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta name="color-scheme" content="light only" />
+    <meta name="supported-color-schemes" content="light" />
+    <style>
+      .tq-header-title,
+      .tq-header-subtitle {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+      }
+      @media (prefers-color-scheme: dark) {
+        .tq-header-title,
+        .tq-header-subtitle {
+          color: #ffffff !important;
+          -webkit-text-fill-color: #ffffff !important;
+        }
+      }
+      [data-ogsc] .tq-header-title,
+      [data-ogsc] .tq-header-subtitle {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
+      }
+    </style>
+  </head>
+  <body style="margin:0;padding:0;background:#eef2ff;font-family:Arial,sans-serif;color:#0f172a;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef2ff;padding:24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="640" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #c7d2fe;">
+            <tr>
+              <td style="background:linear-gradient(135deg,#221bff,#2b24ff,#3f37ff);padding:28px;color:#ffffff;">
+                <div style="text-align:right;margin-bottom:8px;">
+                  <img
+                    src="https://truequestlearning.com/logo-emailer.png"
+                    alt="TrueQuest Learning Logo"
+                    width="56"
+                    height="56"
+                    style="display:inline-block;"
+                  />
+                </div>
+                <h1 class="tq-header-title" style="margin:0;font-size:26px;line-height:1.3;color:#ffffff !important;-webkit-text-fill-color:#ffffff !important;">Registration Received</h1>
+                <p class="tq-header-subtitle" style="margin:10px 0 0 0;font-size:14px;line-height:1.6;opacity:.94;color:#ffffff !important;-webkit-text-fill-color:#ffffff !important;">
+                  Your application is currently under review by our admissions team.
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 28px;">
+                <div style="margin:0 0 14px 0;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+                  <img
+                    src="https://truequestlearning.com/banner-emailer.jpg"
+                    alt="TrueQuest Learning Banner"
+                    width="584"
+                    style="display:block;width:100%;height:auto;"
+                  />
+                </div>
+                <p style="margin:0 0 12px 0;font-size:14px;line-height:1.7;">Hi ${studentName},</p>
+                <p style="margin:0 0 14px 0;font-size:14px;line-height:1.7;">
+                  Thank you for submitting your registration to TrueQuest Learning.
+                </p>
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 16px 0;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;">
+                  <tr>
+                    <td style="padding:14px;">
+                      <div style="font-size:13px;color:#334155;line-height:1.8;">
+                        <strong>Status:</strong> Under review<br/>
+                        <strong>Next Batch Start:</strong> ${nextBatchLabel}
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+                <p style="margin:0 0 12px 0;font-size:13px;line-height:1.8;color:#334155;">
+                  Once your registration is approved, you’ll receive a confirmation email with your <strong>Registration Code</strong> and next steps.
+                </p>
+                <p style="margin:0 0 12px 0;font-size:13px;line-height:1.8;color:#334155;">
+                  For more details, visit:
+                  <a href="https://truequestlearning.com" style="color:#2b24ff;text-decoration:underline;">truequestlearning.com</a>
+                </p>
+                <p style="margin:0 0 12px 0;font-size:13px;line-height:1.8;color:#334155;">
+                  Contact: +91 97470 03913 / +91 97470 03918 | Sulthan Bathery, Wayanad
+                </p>
+                <p style="margin:0 0 14px 0;font-size:13px;line-height:1.8;color:#334155;">
+                  📸 <a href="https://www.instagram.com/truequestlearning" style="color:#2b24ff;text-decoration:underline;">Instagram</a> |
+                  👍 <a href="https://www.facebook.com/truequestlearning" style="color:#2b24ff;text-decoration:underline;">Facebook</a> |
+                  💼 <a href="https://www.linkedin.com/company/truequestlearning/" style="color:#2b24ff;text-decoration:underline;">LinkedIn</a> |
+                  ▶️ <a href="https://youtube.com/@truequestlearning?si=v8rq-EW8KFl4JGY2" style="color:#2b24ff;text-decoration:underline;">YouTube</a>
+                </p>
+                <p style="margin:16px 0 0 0;font-size:14px;line-height:1.7;">
+                  Regards,<br/><strong>Team TrueQuest Learning</strong>
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
 async function sendRegistrationCongratsEmail(params: {
   studentName: string;
   emailId: string;
@@ -242,8 +357,11 @@ async function sendRegistrationCongratsEmail(params: {
     auth: { user: smtpUser, pass: smtpPassword },
   });
 
+  const fromName = (process.env.SMTP_FROM_NAME || "TrueQuest Learning").trim();
+  const fromAddress = `${fromName} <${smtpUser}>`;
+
   await transporter.sendMail({
-    from: smtpUser,
+    from: fromAddress,
     to: params.emailId,
     subject: `TrueQuest Learning | Registration Confirmed (${params.regNo})`,
     text: `Hi ${params.studentName}, your registration is confirmed. Registration Code: ${params.regNo}.`,
@@ -251,6 +369,85 @@ async function sendRegistrationCongratsEmail(params: {
       studentName: params.studentName,
       regNo: params.regNo,
       courseSelected: params.courseSelected,
+      nextBatchStartDate,
+    }),
+  });
+}
+
+async function sendRegistrationUnderReviewEmail(params: {
+  studentName: string;
+  emailId: string;
+}): Promise<void> {
+  const smtpRows = (await sql`
+    SELECT host, port, username, password
+    FROM smtp_settings
+    WHERE id = 1
+    LIMIT 1
+  `) as Array<{
+    host: string | null;
+    port: string | null;
+    username: string | null;
+    password: string | null;
+  }>;
+
+  const customSmtp = smtpRows[0];
+  const customPassword = customSmtp?.password?.trim()
+    ? decryptSmtpPassword(customSmtp.password.trim())
+    : "";
+  const hasCustom =
+    Boolean(customSmtp?.host?.trim()) &&
+    Boolean(customSmtp?.port?.trim()) &&
+    Boolean(customSmtp?.username?.trim()) &&
+    Boolean(customPassword);
+
+  const smtpHost = hasCustom ? customSmtp?.host?.trim() || "" : process.env.SMTP_HOST?.trim() || "";
+  const smtpPortRaw = hasCustom ? customSmtp?.port?.trim() || "" : process.env.SMTP_PORT?.trim() || "";
+  const smtpUser = hasCustom ? customSmtp?.username?.trim() || "" : process.env.SMTP_USER?.trim() || "";
+  const smtpPassword = hasCustom ? customPassword : process.env.SMTP_PASSWORD?.trim() || "";
+  const smtpPort = Number(smtpPortRaw);
+
+  if (!smtpHost || !smtpPort || !smtpUser || !smtpPassword) {
+    throw new Error("SMTP is not configured.");
+  }
+
+  const adminSettingsRows = (await sql`
+    SELECT next_batch_start_date
+    FROM admin_settings
+    WHERE id = 1
+    LIMIT 1
+  `) as Array<{ next_batch_start_date: string | null }>;
+  const nextBatchStartDate = adminSettingsRows[0]?.next_batch_start_date || null;
+
+  const transporter = nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpPort === 465,
+    auth: { user: smtpUser, pass: smtpPassword },
+  });
+
+  const fromName = (process.env.SMTP_FROM_NAME || "TrueQuest Learning").trim();
+  const fromAddress = `${fromName} <${smtpUser}>`;
+
+  const subject = "TrueQuest Learning | Registration Received (Under Review)";
+  const textLines = [
+    `Hi ${params.studentName},`,
+    "",
+    "Thank you for submitting your registration to TrueQuest Learning.",
+    "",
+    "Your application is currently under review by our admissions team.",
+    "Once it is approved, you will receive a confirmation email with your Registration Code and next steps.",
+    "",
+    "Regards,",
+    "Team TrueQuest Learning",
+  ];
+
+  await transporter.sendMail({
+    from: fromAddress,
+    to: params.emailId,
+    subject,
+    text: textLines.join("\n"),
+    html: buildRegistrationUnderReviewHtml({
+      studentName: params.studentName,
       nextBatchStartDate,
     }),
   });
@@ -556,11 +753,16 @@ export async function POST(req: NextRequest) {
         { status: 200 },
       );
     }
+    try {
+      await sendRegistrationUnderReviewEmail({
+        studentName: name,
+        emailId,
+      });
+    } catch (mailError) {
+      console.error("Registration under-review email send failed:", mailError);
+    }
 
-    return NextResponse.json(
-      { status: "under_review", studentName: name },
-      { status: 200 },
-    );
+    return NextResponse.json({ status: "under_review", studentName: name }, { status: 200 });
   } catch (error: unknown) {
     const postgresError = error as { code?: string };
     if (postgresError.code === "23505") {
