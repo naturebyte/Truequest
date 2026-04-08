@@ -64,6 +64,7 @@ function PaginationControls({
 export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } = {}) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [isInitializing, setIsInitializing] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -129,38 +130,42 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
   const [sendingNotificationEmail, setSendingNotificationEmail] = useState<string | null>(null);
 
   async function fetchRegistrations() {
-    const response = await fetch("/api/admin/registrations");
-    if (response.status === 401) {
-      setIsAuthenticated(false);
-      return;
-    }
+    try {
+      const response = await fetch("/api/admin/registrations");
+      if (response.status === 401) {
+        setIsAuthenticated(false);
+        return;
+      }
 
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(data?.error || "Unable to load registrations.");
-    }
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "Unable to load registrations.");
+      }
 
-    setRegistrations(data.registrations || []);
-    setAllowlist(data.allowlist || []);
-    setTransactions(data.transactions || []);
-    setBrochureRequests(data.brochureRequests || []);
-    setNotificationRequestedUsers(data.notificationRequestedUsers || []);
-    setSmtpSettings(
-      data.smtpSettings || {
-        host: "",
-        port: "",
-        user: "",
-        source: "unset",
-        password_set: false,
-      },
-    );
-    setSmtpHostInput(data.smtpSettings?.host || "");
-    setSmtpPortInput(data.smtpSettings?.port || "");
-    setSmtpUserInput(data.smtpSettings?.user || "");
-    setSmtpPasswordInput("");
-    setNextBatchStartDate(data.nextBatchStartDate || "");
-    setNextBatchStartDateInput(data.nextBatchStartDate || "");
-    setIsAuthenticated(true);
+      setRegistrations(data.registrations || []);
+      setAllowlist(data.allowlist || []);
+      setTransactions(data.transactions || []);
+      setBrochureRequests(data.brochureRequests || []);
+      setNotificationRequestedUsers(data.notificationRequestedUsers || []);
+      setSmtpSettings(
+        data.smtpSettings || {
+          host: "",
+          port: "",
+          user: "",
+          source: "unset",
+          password_set: false,
+        },
+      );
+      setSmtpHostInput(data.smtpSettings?.host || "");
+      setSmtpPortInput(data.smtpSettings?.port || "");
+      setSmtpUserInput(data.smtpSettings?.user || "");
+      setSmtpPasswordInput("");
+      setNextBatchStartDate(data.nextBatchStartDate || "");
+      setNextBatchStartDateInput(data.nextBatchStartDate || "");
+      setIsAuthenticated(true);
+    } finally {
+      setIsInitializing(false);
+    }
   }
 
   useEffect(() => {
@@ -846,7 +851,14 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
   return (
     <main className="min-h-screen bg-white py-6 text-slate-900 sm:py-8">
       <div className="w-full px-3 sm:px-5 lg:px-6">
-        {!isAuthenticated ? (
+        {isInitializing ? (
+          <div className="flex min-h-[calc(100vh-12rem)] items-center justify-center">
+            <div className="inline-flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+              <span className="h-5 w-5 animate-spin rounded-full border-2 border-[#2b24ff]/30 border-t-[#2b24ff]" />
+              <span className="text-sm font-medium text-slate-700">Loading admin panel...</span>
+            </div>
+          </div>
+        ) : !isAuthenticated ? (
           <LoginForm
             username={username}
             password={password}
