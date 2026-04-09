@@ -92,18 +92,26 @@ export default function ComingSoon() {
     setOfferPhoneNumber("");
   }
 
-  function getBrochurePath(offerType: "HR" | "DIGITAL_MARKETING"): string {
-    return offerType === "HR"
-      ? "/broshures/TrueQuest HR.pdf"
-      : "/broshures/TrueQuest HR.pdf";
+  function getBrochureDownloadUrl(offerType: "HR" | "DIGITAL_MARKETING"): string {
+    return `/api/brochure?offer=${encodeURIComponent(offerType)}`;
   }
 
   function getOfferLabel(offerType: "HR" | "DIGITAL_MARKETING"): string {
     return offerType === "HR" ? "HR" : "Digital Marketing";
   }
 
-  function openBrochure(filePath: string) {
-    window.open(filePath, "_blank", "noopener,noreferrer");
+  function openBrochure(
+    brochureUrl: string,
+    brochureWindow: Window | null
+  ) {
+    // In-app browsers (like Instagram) frequently block async popups.
+    // Reuse a tab opened from the original user click if available.
+    if (brochureWindow && !brochureWindow.closed) {
+      brochureWindow.location.href = brochureUrl;
+      return;
+    }
+
+    window.location.href = brochureUrl;
   }
 
   async function handleOfferSubmit(event: FormEvent<HTMLFormElement>) {
@@ -137,6 +145,8 @@ export default function ComingSoon() {
       return;
     }
 
+    const brochureWindow = window.open("", "_blank", "noopener,noreferrer");
+
     setIsOfferSubmitting(true);
     try {
       const response = await fetch("/api/offers", {
@@ -156,8 +166,8 @@ export default function ComingSoon() {
         throw new Error(data?.error || "Unable to save your details.");
       }
 
-      const brochurePath = getBrochurePath(selectedOffer);
-      openBrochure(brochurePath);
+      const brochureUrl = getBrochureDownloadUrl(selectedOffer);
+      openBrochure(brochureUrl, brochureWindow);
 
       setToast({
         type: "success",
@@ -165,6 +175,9 @@ export default function ComingSoon() {
       });
       closeOfferModal();
     } catch {
+      if (brochureWindow && !brochureWindow.closed) {
+        brochureWindow.close();
+      }
       setToast({
         type: "error",
         message: "Unable to submit right now. Please try again.",
