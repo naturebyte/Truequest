@@ -412,6 +412,35 @@ async function ensureTables() {
       updated_at timestamptz DEFAULT now()
     )
   `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS webinars (
+      id serial PRIMARY KEY,
+      title text NOT NULL,
+      event_date date NOT NULL,
+      event_time time NOT NULL,
+      location text NOT NULL DEFAULT 'Sultan Bathery, Wayanad',
+      created_at timestamptz DEFAULT now(),
+      updated_at timestamptz DEFAULT now()
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS webinar_registrations (
+      id serial PRIMARY KEY,
+      name text NOT NULL,
+      phone_number text NOT NULL,
+      email_id text NOT NULL,
+      qualification text NOT NULL,
+      webinar_id integer REFERENCES webinars(id) ON DELETE SET NULL,
+      created_at timestamptz DEFAULT now()
+    )
+  `;
+
+  await sql`
+    ALTER TABLE webinar_registrations
+    ADD COLUMN IF NOT EXISTS webinar_id integer REFERENCES webinars(id) ON DELETE SET NULL
+  `;
 }
 
 function isAuthorized(req: NextRequest): boolean {
@@ -574,6 +603,48 @@ export async function GET(req: NextRequest) {
       created_at: string;
     }>;
 
+    const webinars = (await sql`
+      SELECT id, title, event_date, event_time, location, created_at, updated_at
+      FROM webinars
+      ORDER BY event_date DESC, event_time DESC
+    `) as Array<{
+      id: number;
+      title: string;
+      event_date: string;
+      event_time: string;
+      location: string;
+      created_at: string;
+      updated_at: string;
+    }>;
+
+    const webinarRegistrations = (await sql`
+      SELECT
+        webinar_registrations.id,
+        webinar_registrations.name,
+        webinar_registrations.phone_number,
+        webinar_registrations.email_id,
+        webinar_registrations.qualification,
+        webinar_registrations.webinar_id,
+        webinars.title AS webinar_title,
+        webinars.event_date AS webinar_date,
+        webinars.event_time AS webinar_time,
+        webinar_registrations.created_at
+      FROM webinar_registrations
+      LEFT JOIN webinars ON webinars.id = webinar_registrations.webinar_id
+      ORDER BY webinar_registrations.created_at DESC
+    `) as Array<{
+      id: number;
+      name: string;
+      phone_number: string;
+      email_id: string;
+      qualification: "12" | "Degree" | "Pg" | "Other";
+      webinar_id: number | null;
+      webinar_title: string | null;
+      webinar_date: string | null;
+      webinar_time: string | null;
+      created_at: string;
+    }>;
+
     await sql`
       CREATE TABLE IF NOT EXISTS notify_emails (
         id serial PRIMARY KEY,
@@ -659,6 +730,8 @@ export async function GET(req: NextRequest) {
         allowlist,
         transactions,
         brochureRequests,
+        webinars,
+        webinarRegistrations,
         notificationRequestedUsers,
         smtpSettings,
         nextBatchStartDate,
@@ -705,6 +778,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ status: "ok" }, { status: 200 });
     }
 
+    if (action === "webinar_create") {
+      const title = normalizeString(body.title);
+      const eventDate = normalizeString(body.eventDate);
+      const eventTime = normalizeString(body.eventTime);
+      const location = normalizeString(body.location) || "Sultan Bathery, Wayanad";
+
+      if (!title || !eventDate || !eventTime) {
+        return NextResponse.json(
+          { error: "Webinar title, date and time are required." },
+          { status: 400 },
+        );
+      }
+
+      await sql`
+        INSERT INTO webinars (title, event_date, event_time, location, updated_at)
+        VALUES (${title}, ${eventDate}, ${eventTime}, ${location}, now())
+      `;
+      return NextResponse.json({ status: "ok" }, { status: 200 });
+    }
+
     return NextResponse.json({ error: "Invalid action." }, { status: 400 });
   } catch (error) {
     console.error("Error creating admin registration data:", error);
@@ -737,6 +830,25 @@ export async function PATCH(req: NextRequest) {
         WHERE id = ${id}
       `;
 
+      return NextResponse.json({ status: "ok" }, { status: 200 });
+    }
+
+    if (action === "webinar_update") {
+      const id = Number(body.id);
+      const title = normalizeString(body.title);
+      const eventDate = normalizeString(body.eventDate);
+      const eventTime = normalizeString(body.eventTime);
+      const location = normalizeString(body.location) || "Sultan Bathery, Wayanad";
+
+      if (!id || !title || !eventDate || !eventTime) {
+        return NextResponse.json({ error: "Invalid webinar update data." }, { status: 400 });
+      }
+
+      await sql`
+        UPDATE webinars
+        SET title = ${title}, event_date = ${eventDate}, event_time = ${eventTime}, location = ${location}, updated_at = now()
+        WHERE id = ${id}
+      `;
       return NextResponse.json({ status: "ok" }, { status: 200 });
     }
 
@@ -1252,6 +1364,11 @@ export async function DELETE(req: NextRequest) {
 
     if (action === "allowlist_delete") {
       await sql`DELETE FROM student_allowlist WHERE id = ${id}`;
+      return NextResponse.json({ status: "ok" }, { status: 200 });
+    }
+
+    if (action === "webinar_delete") {
+      await sql`DELETE FROM webinars WHERE id = ${id}`;
       return NextResponse.json({ status: "ok" }, { status: 200 });
     }
 

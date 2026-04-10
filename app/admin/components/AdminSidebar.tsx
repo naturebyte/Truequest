@@ -11,6 +11,7 @@ type AdminSidebarProps = {
 const tabs: Array<{ id: AdminTab; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "registrations", label: "Registrations" },
+  { id: "webinar_registrations", label: "Webinar Management" },
   { id: "allowlist", label: "Allowed Students" },
   { id: "fees", label: "Fee Management" },
   { id: "brochure_requests", label: "Brochure Requests" },

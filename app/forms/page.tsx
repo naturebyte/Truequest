@@ -31,6 +31,16 @@ export default function FormsDashboardPage() {
               Fill and submit student admission details.
             </p>
           </Link>
+          <Link
+            href="/forms/webinar/select"
+            className="rounded-2xl border border-white/20 bg-white/10 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur-md transition hover:bg-white/20"
+          >
+            <p className="text-sm uppercase tracking-wide text-white/70">Webinar Form</p>
+            <h2 className="mt-2 text-2xl font-semibold">Webinar Registration</h2>
+            <p className="mt-2 text-white/80">
+              Register for upcoming webinar sessions and get a confirmation email.
+            </p>
+          </Link>
 { process.env.NODE_ENV === "development" && (
           <Link
             href="/admin"

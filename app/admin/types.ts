@@ -51,6 +51,7 @@ export type AllowlistRecord = {
 export type AdminTab =
   | "overview"
   | "brochure_requests"
+  | "webinar_registrations"
   | "allowlist"
   | "registrations"
   | "fees";
@@ -69,6 +70,29 @@ export type NotificationRequestRecord = {
   created_at: string;
   sent_count: number;
   last_sent_at: string | null;
+};
+
+export type WebinarRegistrationRecord = {
+  id: number;
+  name: string;
+  phone_number: string;
+  email_id: string;
+  qualification: "12" | "Degree" | "Pg" | "Other";
+  webinar_id: number | null;
+  webinar_title: string | null;
+  webinar_date: string | null;
+  webinar_time: string | null;
+  created_at: string;
+};
+
+export type WebinarRecord = {
+  id: number;
+  title: string;
+  event_date: string;
+  event_time: string;
+  location: string;
+  created_at: string;
+  updated_at: string;
 };
 
 export type SmtpSettings = {

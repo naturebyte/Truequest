@@ -14,6 +14,8 @@ import type {
   NotificationRequestRecord,
   RegistrationRecord,
   SmtpSettings,
+  WebinarRecord,
+  WebinarRegistrationRecord,
 } from "./types";
 import {
   formatCurrency,
@@ -72,6 +74,8 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
   const [allowlist, setAllowlist] = useState<AllowlistRecord[]>([]);
   const [transactions, setTransactions] = useState<FeeTransaction[]>([]);
   const [brochureRequests, setBrochureRequests] = useState<BrochureRequestRecord[]>([]);
+  const [webinars, setWebinars] = useState<WebinarRecord[]>([]);
+  const [webinarRegistrations, setWebinarRegistrations] = useState<WebinarRegistrationRecord[]>([]);
   const [notificationRequestedUsers, setNotificationRequestedUsers] = useState<
     NotificationRequestRecord[]
   >([]);
@@ -131,6 +135,14 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
   const [nextBatchStartDateInput, setNextBatchStartDateInput] = useState("");
   const [smtpInfoMessage, setSmtpInfoMessage] = useState("");
   const [sendingNotificationEmail, setSendingNotificationEmail] = useState<string | null>(null);
+  const [webinarTitleInput, setWebinarTitleInput] = useState("");
+  const [webinarDateInput, setWebinarDateInput] = useState("");
+  const [webinarTimeInput, setWebinarTimeInput] = useState("");
+  const [webinarLocationInput, setWebinarLocationInput] = useState("Sultan Bathery, Wayanad");
+  const [editingWebinarId, setEditingWebinarId] = useState<number | null>(null);
+  const [selectedWebinarFilter, setSelectedWebinarFilter] = useState<"all" | number>("all");
+  const [webinarRegistrationSearchTerm, setWebinarRegistrationSearchTerm] = useState("");
+  const [copiedWebinarId, setCopiedWebinarId] = useState<number | null>(null);
 
   async function fetchRegistrations() {
     try {
@@ -149,6 +161,8 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
       setAllowlist(data.allowlist || []);
       setTransactions(data.transactions || []);
       setBrochureRequests(data.brochureRequests || []);
+      setWebinars(data.webinars || []);
+      setWebinarRegistrations(data.webinarRegistrations || []);
       setNotificationRequestedUsers(data.notificationRequestedUsers || []);
       setSmtpSettings(
         data.smtpSettings || {
@@ -431,6 +445,97 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
       setErrorMessage(getErrorMessage(error, "Unable to delete allowlist student."));
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  function resetWebinarForm() {
+    setEditingWebinarId(null);
+    setWebinarTitleInput("");
+    setWebinarDateInput("");
+    setWebinarTimeInput("");
+    setWebinarLocationInput("Sultan Bathery, Wayanad");
+  }
+
+  async function handleWebinarSave(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setErrorMessage("");
+    setIsSaving(true);
+
+    try {
+      const action = editingWebinarId ? "webinar_update" : "webinar_create";
+      const response = await fetch("/api/admin/registrations", {
+        method: editingWebinarId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          id: editingWebinarId,
+          title: webinarTitleInput,
+          eventDate: webinarDateInput,
+          eventTime: webinarTimeInput,
+          location: webinarLocationInput,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "Unable to save webinar.");
+      }
+
+      resetWebinarForm();
+      await fetchRegistrations();
+    } catch (error: unknown) {
+      setErrorMessage(getErrorMessage(error, "Unable to save webinar."));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function startWebinarEdit(webinar: WebinarRecord) {
+    setEditingWebinarId(webinar.id);
+    setWebinarTitleInput(webinar.title);
+    setWebinarDateInput(toDateInputValue(webinar.event_date));
+    setWebinarTimeInput((webinar.event_time || "").slice(0, 5));
+    setWebinarLocationInput(webinar.location || "Sultan Bathery, Wayanad");
+  }
+
+  async function handleWebinarDelete(id: number) {
+    const isConfirmed = window.confirm("Delete this webinar? Linked registrations will be kept.");
+    if (!isConfirmed) {
+      return;
+    }
+
+    setErrorMessage("");
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/admin/registrations", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "webinar_delete", id }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "Unable to delete webinar.");
+      }
+
+      if (selectedWebinarFilter !== "all" && selectedWebinarFilter === id) {
+        setSelectedWebinarFilter("all");
+      }
+      resetWebinarForm();
+      await fetchRegistrations();
+    } catch (error: unknown) {
+      setErrorMessage(getErrorMessage(error, "Unable to delete webinar."));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleCopyWebinarLink(webinarId: number) {
+    try {
+      const webinarUrl = `${window.location.origin}/forms/webinar?webinarId=${webinarId}`;
+      await navigator.clipboard.writeText(webinarUrl);
+      setCopiedWebinarId(webinarId);
+      setTimeout(() => setCopiedWebinarId(null), 2000);
+    } catch {
+      setErrorMessage("Unable to copy webinar link.");
     }
   }
 
@@ -778,6 +883,34 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
     (registrationsPage - 1) * registrationsPageSize,
     registrationsPage * registrationsPageSize,
   );
+  const filteredWebinarRegistrations = webinarRegistrations.filter((row) =>
+    selectedWebinarFilter === "all" ? true : row.webinar_id === selectedWebinarFilter,
+  );
+  const normalizedWebinarRegistrationSearch = webinarRegistrationSearchTerm.trim().toLowerCase();
+  const searchedWebinarRegistrations = filteredWebinarRegistrations.filter((row) => {
+    if (!normalizedWebinarRegistrationSearch) {
+      return true;
+    }
+
+    return (
+      row.name.toLowerCase().includes(normalizedWebinarRegistrationSearch) ||
+      row.phone_number.toLowerCase().includes(normalizedWebinarRegistrationSearch) ||
+      row.email_id.toLowerCase().includes(normalizedWebinarRegistrationSearch) ||
+      (row.webinar_title || "").toLowerCase().includes(normalizedWebinarRegistrationSearch)
+    );
+  });
+  const webinarRegistrationGroups = searchedWebinarRegistrations.reduce<
+    Array<{ label: string; items: WebinarRegistrationRecord[] }>
+  >((groups, row) => {
+    const label = row.webinar_title || "Unassigned webinar";
+    const existingGroup = groups.find((group) => group.label === label);
+    if (existingGroup) {
+      existingGroup.items.push(row);
+      return groups;
+    }
+    groups.push({ label, items: [row] });
+    return groups;
+  }, []);
 
   useEffect(() => {
     if (allowlistPage > allowlistTotalPages) {
@@ -1316,6 +1449,196 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                       )
                     }
                   />
+                </div>
+              </section>
+            )}
+
+            {currentTab === "webinar_registrations" && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
+                <h2 className="text-2xl font-semibold">Webinar Management</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Create, update, and delete webinars. View registrations for each webinar.
+                </p>
+
+                <form
+                  onSubmit={handleWebinarSave}
+                  className="mt-4 grid gap-3 rounded-xl border border-slate-200 p-4 md:grid-cols-2"
+                >
+                  <input
+                    required
+                    value={webinarTitleInput}
+                    onChange={(event) => setWebinarTitleInput(event.target.value)}
+                    placeholder="Webinar title"
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                  />
+                  <input
+                    type="date"
+                    required
+                    value={webinarDateInput}
+                    onChange={(event) => setWebinarDateInput(event.target.value)}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                  />
+                  <input
+                    type="time"
+                    required
+                    value={webinarTimeInput}
+                    onChange={(event) => setWebinarTimeInput(event.target.value)}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                  />
+                  <input
+                    required
+                    value={webinarLocationInput}
+                    onChange={(event) => setWebinarLocationInput(event.target.value)}
+                    placeholder="Location"
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                  />
+                  <div className="md:col-span-2 flex gap-2">
+                    <button
+                      type="submit"
+                      disabled={isSaving}
+                      className="rounded-xl bg-[#2b24ff] px-4 py-2 text-sm font-semibold text-white hover:bg-[#221bff] disabled:opacity-70"
+                    >
+                      {editingWebinarId ? "Update Webinar" : "Create Webinar"}
+                    </button>
+                    {editingWebinarId && (
+                      <button
+                        type="button"
+                        onClick={resetWebinarForm}
+                        className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        Cancel Edit
+                      </button>
+                    )}
+                  </div>
+                </form>
+
+                <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="min-w-full text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50 text-slate-700">
+                        <th className="px-3 py-2">Title</th>
+                        <th className="px-3 py-2">Date</th>
+                        <th className="px-3 py-2">Time</th>
+                        <th className="px-3 py-2">Location</th>
+                        <th className="px-3 py-2">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {webinars.map((webinar) => (
+                        <tr key={webinar.id} className="border-b border-slate-100 text-slate-700">
+                          <td className="px-3 py-2">{webinar.title}</td>
+                          <td className="px-3 py-2">{formatDate(webinar.event_date)}</td>
+                          <td className="px-3 py-2">{(webinar.event_time || "").slice(0, 5)}</td>
+                          <td className="px-3 py-2">{webinar.location}</td>
+                          <td className="px-3 py-2">
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => startWebinarEdit(webinar)}
+                                className="rounded-lg border border-slate-200 px-3 py-1.5 hover:bg-slate-50"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleCopyWebinarLink(webinar.id)}
+                                className="rounded-lg border border-[#2b24ff]/20 bg-[#2b24ff]/10 px-3 py-1.5 text-[#2b24ff] hover:bg-[#2b24ff]/15"
+                              >
+                                {copiedWebinarId === webinar.id ? "Copied Link" : "Copy Link"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleWebinarDelete(webinar.id)}
+                                className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-red-700 hover:bg-red-100"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {webinars.length === 0 && (
+                        <tr>
+                          <td colSpan={5} className="px-3 py-5 text-center text-slate-500">
+                            No webinars created yet.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="mt-6 rounded-xl border border-slate-200 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h3 className="text-lg font-semibold">
+                      Webinar Registrations ({searchedWebinarRegistrations.length})
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      <select
+                        value={selectedWebinarFilter === "all" ? "all" : String(selectedWebinarFilter)}
+                        onChange={(event) =>
+                          setSelectedWebinarFilter(
+                            event.target.value === "all" ? "all" : Number(event.target.value),
+                          )
+                        }
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                      >
+                        <option value="all">All webinars</option>
+                        {webinars.map((webinar) => (
+                          <option key={webinar.id} value={webinar.id}>
+                            {webinar.title}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        value={webinarRegistrationSearchTerm}
+                        onChange={(event) => setWebinarRegistrationSearchTerm(event.target.value)}
+                        placeholder="Search name, phone, email..."
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-3 grid gap-4">
+                    {webinarRegistrationGroups.map((group) => (
+                      <div key={group.label} className="rounded-lg border border-slate-200 bg-white">
+                        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2">
+                          <p className="text-sm font-semibold text-slate-700">{group.label}</p>
+                          <span className="rounded-full bg-[#2b24ff]/10 px-2.5 py-1 text-xs font-medium text-[#2b24ff]">
+                            {group.items.length} registration{group.items.length > 1 ? "s" : ""}
+                          </span>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full text-left text-sm">
+                            <thead>
+                              <tr className="border-b border-slate-200 bg-slate-50/60 text-slate-700">
+                                <th className="px-3 py-2">Name</th>
+                                <th className="px-3 py-2">Phone</th>
+                                <th className="px-3 py-2">Email</th>
+                                <th className="px-3 py-2">Qualification</th>
+                                <th className="px-3 py-2">Submitted On</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {group.items.map((row) => (
+                                <tr key={row.id} className="border-b border-slate-100 text-slate-700">
+                                  <td className="px-3 py-2 font-medium">{row.name}</td>
+                                  <td className="px-3 py-2">{row.phone_number}</td>
+                                  <td className="px-3 py-2">{row.email_id}</td>
+                                  <td className="px-3 py-2">{row.qualification}</td>
+                                  <td className="px-3 py-2">{formatDate(row.created_at)}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ))}
+                    {webinarRegistrationGroups.length === 0 && (
+                      <div className="rounded-lg border border-slate-200 bg-white px-3 py-6 text-center text-slate-500">
+                        No webinar registrations for the current filter/search.
+                      </div>
+                    )}
+                  </div>
                 </div>
               </section>
             )}
