@@ -10,6 +10,7 @@ type WebinarRow = {
   event_date: string;
   event_time: string;
   location: string;
+  is_active: boolean;
 };
 
 function normalizeString(value: unknown): string {
@@ -62,9 +63,15 @@ async function ensureWebinarTables() {
       event_date date NOT NULL,
       event_time time NOT NULL,
       location text NOT NULL DEFAULT 'Sultan Bathery, Wayanad',
+      is_active boolean NOT NULL DEFAULT true,
       created_at timestamptz DEFAULT now(),
       updated_at timestamptz DEFAULT now()
     )
+  `;
+
+  await sql`
+    ALTER TABLE webinars
+    ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true
   `;
 
   await sql`
@@ -74,14 +81,25 @@ async function ensureWebinarTables() {
       phone_number text NOT NULL,
       email_id text NOT NULL,
       qualification text NOT NULL,
-      webinar_id integer REFERENCES webinars(id) ON DELETE SET NULL,
+      webinar_id integer REFERENCES webinars(id) ON DELETE CASCADE,
       created_at timestamptz DEFAULT now()
     )
   `;
 
   await sql`
     ALTER TABLE webinar_registrations
-    ADD COLUMN IF NOT EXISTS webinar_id integer REFERENCES webinars(id) ON DELETE SET NULL
+    ADD COLUMN IF NOT EXISTS webinar_id integer
+  `;
+
+  await sql`
+    ALTER TABLE webinar_registrations
+    DROP CONSTRAINT IF EXISTS webinar_registrations_webinar_id_fkey
+  `;
+
+  await sql`
+    ALTER TABLE webinar_registrations
+    ADD CONSTRAINT webinar_registrations_webinar_id_fkey
+    FOREIGN KEY (webinar_id) REFERENCES webinars(id) ON DELETE CASCADE
   `;
 }
 
@@ -206,8 +224,9 @@ export async function GET() {
   try {
     await ensureWebinarTables();
     const webinars = (await sql`
-      SELECT id, title, event_date, event_time, location
+      SELECT id, title, event_date, event_time, location, is_active
       FROM webinars
+      WHERE is_active = true
       ORDER BY event_date ASC, event_time ASC
     `) as WebinarRow[];
 
@@ -238,13 +257,13 @@ export async function POST(req: NextRequest) {
     }
 
     const webinarRows = (await sql`
-      SELECT id, title, event_date, event_time, location
+      SELECT id, title, event_date, event_time, location, is_active
       FROM webinars
       WHERE id = ${webinarId}
       LIMIT 1
     `) as WebinarRow[];
     const webinar = webinarRows[0];
-    if (!webinar) {
+    if (!webinar || !webinar.is_active) {
       return NextResponse.json({ error: "Selected webinar not found." }, { status: 404 });
     }
 

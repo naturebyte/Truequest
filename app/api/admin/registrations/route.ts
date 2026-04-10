@@ -420,9 +420,15 @@ async function ensureTables() {
       event_date date NOT NULL,
       event_time time NOT NULL,
       location text NOT NULL DEFAULT 'Sultan Bathery, Wayanad',
+      is_active boolean NOT NULL DEFAULT true,
       created_at timestamptz DEFAULT now(),
       updated_at timestamptz DEFAULT now()
     )
+  `;
+
+  await sql`
+    ALTER TABLE webinars
+    ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true
   `;
 
   await sql`
@@ -432,14 +438,25 @@ async function ensureTables() {
       phone_number text NOT NULL,
       email_id text NOT NULL,
       qualification text NOT NULL,
-      webinar_id integer REFERENCES webinars(id) ON DELETE SET NULL,
+      webinar_id integer REFERENCES webinars(id) ON DELETE CASCADE,
       created_at timestamptz DEFAULT now()
     )
   `;
 
   await sql`
     ALTER TABLE webinar_registrations
-    ADD COLUMN IF NOT EXISTS webinar_id integer REFERENCES webinars(id) ON DELETE SET NULL
+    ADD COLUMN IF NOT EXISTS webinar_id integer
+  `;
+
+  await sql`
+    ALTER TABLE webinar_registrations
+    DROP CONSTRAINT IF EXISTS webinar_registrations_webinar_id_fkey
+  `;
+
+  await sql`
+    ALTER TABLE webinar_registrations
+    ADD CONSTRAINT webinar_registrations_webinar_id_fkey
+    FOREIGN KEY (webinar_id) REFERENCES webinars(id) ON DELETE CASCADE
   `;
 }
 
@@ -604,7 +621,7 @@ export async function GET(req: NextRequest) {
     }>;
 
     const webinars = (await sql`
-      SELECT id, title, event_date, event_time, location, created_at, updated_at
+      SELECT id, title, event_date, event_time, location, is_active, created_at, updated_at
       FROM webinars
       ORDER BY event_date DESC, event_time DESC
     `) as Array<{
@@ -613,6 +630,7 @@ export async function GET(req: NextRequest) {
       event_date: string;
       event_time: string;
       location: string;
+      is_active: boolean;
       created_at: string;
       updated_at: string;
     }>;
@@ -847,6 +865,22 @@ export async function PATCH(req: NextRequest) {
       await sql`
         UPDATE webinars
         SET title = ${title}, event_date = ${eventDate}, event_time = ${eventTime}, location = ${location}, updated_at = now()
+        WHERE id = ${id}
+      `;
+      return NextResponse.json({ status: "ok" }, { status: 200 });
+    }
+
+    if (action === "webinar_toggle_active") {
+      const id = Number(body.id);
+      const isActive = Boolean(body.isActive);
+
+      if (!id) {
+        return NextResponse.json({ error: "Webinar id is required." }, { status: 400 });
+      }
+
+      await sql`
+        UPDATE webinars
+        SET is_active = ${isActive}, updated_at = now()
         WHERE id = ${id}
       `;
       return NextResponse.json({ status: "ok" }, { status: 200 });

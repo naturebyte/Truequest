@@ -91,6 +91,7 @@ export type WebinarRecord = {
   event_date: string;
   event_time: string;
   location: string;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 };
