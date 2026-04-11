@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, startTransition, useEffect, useState } from "react";
 
 type QualificationOption = "12" | "Degree" | "PG" | "Other" | "";
 
@@ -78,9 +78,62 @@ export default function WebinarRegistrationClient({
   const [formData, setFormData] = useState<WebinarFormState>(defaultFormState);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [duplicateNotice, setDuplicateNotice] = useState("");
+
+  useEffect(() => {
+    if (initialWebinar) {
+      router.prefetch("/forms/webinar/confirmation");
+    }
+  }, [router, initialWebinar]);
+
+  useEffect(() => {
+    if (!initialWebinar?.slug) {
+      setDuplicateNotice("");
+      return;
+    }
+
+    const phoneDigits = formData.phoneNumber.replace(/\D/g, "");
+    if (phoneDigits.length < 10) {
+      setDuplicateNotice("");
+      return;
+    }
+
+    const slug = initialWebinar.slug;
+    let cancelled = false;
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ slug, phone: phoneDigits });
+        const res = await fetch(`/api/forms/webinar/duplicate-check?${params.toString()}`);
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) {
+          return;
+        }
+        if (data.duplicate === true && typeof data.message === "string") {
+          setDuplicateNotice(data.message);
+        } else {
+          setDuplicateNotice("");
+        }
+      } catch {
+        if (!cancelled) {
+          setDuplicateNotice("");
+        }
+      }
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [formData.phoneNumber, initialWebinar]);
+
+  const formLocked = isSubmitting || !initialWebinar;
+  const phoneAlreadyRegistered = Boolean(duplicateNotice);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (phoneAlreadyRegistered) {
+      return;
+    }
     setErrorMessage("");
     setIsSubmitting(true);
 
@@ -96,12 +149,19 @@ export default function WebinarRegistrationClient({
 
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(data?.error || "Unable to submit webinar registration.");
+        const msg =
+          typeof data?.error === "string" ? data.error : "Unable to submit webinar registration.";
+        if (response.status === 409) {
+          setDuplicateNotice(msg);
+          return;
+        }
+        throw new Error(msg);
       }
 
-      router.push(
-        `/forms/webinar/confirmation?title=${encodeURIComponent(data.webinarTitle || "")}&date=${encodeURIComponent(data.webinarDate || "")}&time=${encodeURIComponent(data.webinarTime || "")}&location=${encodeURIComponent(data.webinarLocation || "")}&bannerImage=${encodeURIComponent(data.webinarBannerImage || "")}&slug=${encodeURIComponent(data.webinarSlug || "")}`,
-      );
+      const confirmationUrl = `/forms/webinar/confirmation?title=${encodeURIComponent(data.webinarTitle || "")}&date=${encodeURIComponent(data.webinarDate || "")}&time=${encodeURIComponent(data.webinarTime || "")}&location=${encodeURIComponent(data.webinarLocation || "")}&bannerImage=${encodeURIComponent(data.webinarBannerImage || "")}&slug=${encodeURIComponent(data.webinarSlug || "")}`;
+      startTransition(() => {
+        router.push(confirmationUrl);
+      });
     } catch (error: unknown) {
       setErrorMessage(getErrorMessage(error, "Something went wrong."));
     } finally {
@@ -140,6 +200,7 @@ export default function WebinarRegistrationClient({
 
         <form
           onSubmit={handleSubmit}
+          aria-busy={isSubmitting}
           className="mt-8 rounded-2xl border border-white/20 bg-white/10 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur-md sm:p-7"
         >
           <div className="space-y-4">
@@ -167,9 +228,10 @@ export default function WebinarRegistrationClient({
               <span className="mb-1 block text-sm text-white/90">Name *</span>
               <input
                 required
+                disabled={formLocked}
                 value={formData.name}
                 onChange={(event) => setFormData({ ...formData, name: event.target.value })}
-                className="w-full rounded-xl bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-lime-400/80"
+                className="w-full rounded-xl bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-lime-400/80 disabled:cursor-not-allowed disabled:opacity-70"
               />
             </label>
 
@@ -177,6 +239,7 @@ export default function WebinarRegistrationClient({
               <span className="mb-1 block text-sm text-white/90">Phone Number *</span>
               <input
                 required
+                disabled={formLocked}
                 value={formData.phoneNumber}
                 onChange={(event) =>
                   setFormData({
@@ -184,7 +247,7 @@ export default function WebinarRegistrationClient({
                     phoneNumber: event.target.value.replace(/\D/g, "").slice(0, 10),
                   })
                 }
-                className="w-full rounded-xl bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-lime-400/80"
+                className="w-full rounded-xl bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-lime-400/80 disabled:cursor-not-allowed disabled:opacity-70"
               />
             </label>
 
@@ -193,9 +256,10 @@ export default function WebinarRegistrationClient({
               <input
                 type="email"
                 required
+                disabled={formLocked}
                 value={formData.emailId}
                 onChange={(event) => setFormData({ ...formData, emailId: event.target.value })}
-                className="w-full rounded-xl bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-lime-400/80"
+                className="w-full rounded-xl bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-lime-400/80 disabled:cursor-not-allowed disabled:opacity-70"
               />
             </label>
 
@@ -203,6 +267,7 @@ export default function WebinarRegistrationClient({
               <span className="mb-1 block text-sm text-white/90">Qualification *</span>
               <select
                 required
+                disabled={formLocked}
                 value={formData.qualification}
                 onChange={(event) =>
                   setFormData({
@@ -210,7 +275,7 @@ export default function WebinarRegistrationClient({
                     qualification: event.target.value as WebinarFormState["qualification"],
                   })
                 }
-                className="w-full rounded-xl bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-lime-400/80"
+                className="w-full rounded-xl bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-lime-400/80 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 <option value="">Select qualification</option>
                 <option value="12">12</option>
@@ -221,19 +286,50 @@ export default function WebinarRegistrationClient({
             </label>
           </div>
 
+          {duplicateNotice && (
+            <p
+              className="mt-4 rounded-xl border border-amber-200/55 bg-amber-500/20 px-4 py-3 text-sm text-amber-50"
+              role="status"
+            >
+              {duplicateNotice}
+            </p>
+          )}
+
           {errorMessage && (
             <p className="mt-4 rounded-xl border border-red-300/60 bg-red-500/70 px-4 py-3 text-sm">
               {errorMessage}
             </p>
           )}
 
-          <button
-            type="submit"
-            disabled={isSubmitting || !initialWebinar}
-            className="mt-5 w-full rounded-xl bg-lime-400 px-4 py-3 font-semibold text-black transition hover:bg-lime-300 disabled:cursor-not-allowed disabled:opacity-80"
-          >
-            {isSubmitting ? "Submitting..." : "Submit Webinar Form"}
-          </button>
+          {!phoneAlreadyRegistered && (
+            <button
+              type="submit"
+              disabled={formLocked}
+              className="mt-5 flex min-h-13 w-full items-center justify-center gap-2 rounded-xl bg-lime-400 px-4 py-3 font-semibold text-black transition hover:bg-lime-300 disabled:cursor-not-allowed disabled:opacity-85"
+            >
+              {isSubmitting ? (
+                <>
+                  <svg
+                    className="h-5 w-5 shrink-0 animate-spin text-black/80"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    aria-hidden
+                  >
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path
+                      className="opacity-90"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                  <span>Saving your seat…</span>
+                </>
+              ) : (
+                "Submit Webinar Form"
+              )}
+            </button>
+          )}
         </form>
       </div>
     </main>

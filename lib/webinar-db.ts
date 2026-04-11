@@ -11,6 +11,14 @@ export type PublicWebinarRow = {
   banner_image_path: string | null;
 };
 
+let ensureWebinarTablesPromise: Promise<void> | null = null;
+
+/** Runs `ensureWebinarTables` at most once per server instance (parallel callers share the same work). */
+export function ensureWebinarTablesOnce(): Promise<void> {
+  ensureWebinarTablesPromise ??= ensureWebinarTables();
+  return ensureWebinarTablesPromise;
+}
+
 export async function ensureWebinarTables() {
   await sql`
     CREATE TABLE IF NOT EXISTS webinars (
@@ -84,8 +92,25 @@ export async function ensureWebinarTables() {
   `;
 }
 
+export async function listActiveWebinarsForPublic(): Promise<PublicWebinarRow[]> {
+  await ensureWebinarTablesOnce();
+  const rows = (await sql`
+    SELECT id, slug, title, event_date, event_time, location, banner_image_path
+    FROM webinars
+    WHERE is_active = true
+    ORDER BY event_date ASC, event_time ASC
+  `) as PublicWebinarRow[];
+
+  return rows.map((row) => ({
+    ...row,
+    event_date: String(row.event_date),
+    event_time: String(row.event_time),
+    banner_image_path: normalizePublicAssetPath(row.banner_image_path),
+  }));
+}
+
 export async function getActiveWebinarBySlug(rawSlug: string): Promise<PublicWebinarRow | null> {
-  await ensureWebinarTables();
+  await ensureWebinarTablesOnce();
   const normalized = rawSlug.trim().toLowerCase();
   if (!normalized) {
     return null;

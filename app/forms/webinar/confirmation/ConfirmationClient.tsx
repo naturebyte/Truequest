@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { absoluteWebinarRegistrationUrl, buildWebinarShareBody } from "@/lib/webinar-utils";
 import { useCallback, useState } from "react";
 
 type WebinarConfirmationClientProps = {
@@ -40,11 +41,6 @@ function formatWebinarTime(value: string): string {
   });
 }
 
-function buildRegistrationPageUrl(origin: string, slug: string): string {
-  const encoded = encodeURIComponent(slug);
-  return `${origin}/forms/webinar/${encoded}`;
-}
-
 export default function WebinarConfirmationClient({
   webinarTitle,
   webinarDate,
@@ -55,43 +51,57 @@ export default function WebinarConfirmationClient({
 }: WebinarConfirmationClientProps) {
   const [shareHint, setShareHint] = useState<"idle" | "copied" | "error">("idle");
 
-  const registrationUrl = useCallback(() => {
-    if (typeof window === "undefined" || !webinarSlug) {
+  const registrationAbsoluteUrl = useCallback(() => {
+    if (!webinarSlug) {
       return "";
     }
-    return buildRegistrationPageUrl(window.location.origin, webinarSlug);
+    if (typeof window !== "undefined") {
+      const envBase = process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/+$/, "");
+      if (envBase) {
+        const segment = encodeURIComponent(webinarSlug.trim().toLowerCase());
+        return `${envBase}/forms/webinar/${segment}`;
+      }
+      const segment = encodeURIComponent(webinarSlug.trim().toLowerCase());
+      return `${window.location.origin}/forms/webinar/${segment}`;
+    }
+    return absoluteWebinarRegistrationUrl(webinarSlug);
   }, [webinarSlug]);
 
-  const copyRegistrationLink = useCallback(async () => {
-    const url = registrationUrl();
+  const shareBody = useCallback(() => {
+    const url = registrationAbsoluteUrl();
     if (!url) {
+      return "";
+    }
+    return buildWebinarShareBody(webinarTitle, url);
+  }, [registrationAbsoluteUrl, webinarTitle]);
+
+  const copyShareMessage = useCallback(async () => {
+    const body = shareBody();
+    if (!body) {
       setShareHint("error");
       return;
     }
     try {
-      await navigator.clipboard.writeText(url);
+      await navigator.clipboard.writeText(body);
       setShareHint("copied");
       window.setTimeout(() => setShareHint("idle"), 2500);
     } catch {
       setShareHint("error");
     }
-  }, [registrationUrl]);
+  }, [shareBody]);
 
   const handleShare = useCallback(async () => {
-    const url = registrationUrl();
-    if (!url) {
+    const url = registrationAbsoluteUrl();
+    const text = shareBody();
+    if (!url || !text) {
       return;
     }
-    const shareText = webinarTitle.trim()
-      ? `Register for this TrueQuest webinar: ${webinarTitle}`
-      : "Register for this TrueQuest webinar";
 
     if (typeof navigator !== "undefined" && navigator.share) {
       try {
         await navigator.share({
           title: webinarTitle.trim() || "TrueQuest webinar",
-          text: shareText,
-          url,
+          text,
         });
         return;
       } catch (err) {
@@ -101,8 +111,8 @@ export default function WebinarConfirmationClient({
       }
     }
 
-    await copyRegistrationLink();
-  }, [copyRegistrationLink, registrationUrl, webinarTitle]);
+    await copyShareMessage();
+  }, [copyShareMessage, registrationAbsoluteUrl, shareBody, webinarTitle]);
 
   const heroSrc = webinarBannerImage?.trim() || "/banner.jpg";
   const heroAlt = webinarTitle.trim() ? webinarTitle : "TrueQuest Learning";
@@ -155,26 +165,26 @@ export default function WebinarConfirmationClient({
               <button
                 type="button"
                 onClick={() => void handleShare()}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/35 bg-white/15 px-6 py-3 text-sm font-semibold text-white shadow-sm backdrop-blur-sm transition hover:bg-white/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime-300"
+                className="inline-flex w-full max-w-xs items-center justify-center gap-2 rounded-xl bg-lime-400 px-6 py-3 text-sm font-semibold text-black shadow-sm transition hover:bg-lime-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:w-auto sm:max-w-none"
               >
                 <span aria-hidden>↗</span>
                 Share webinar link
               </button>
               <button
                 type="button"
-                onClick={() => void copyRegistrationLink()}
-                className="text-sm text-white/75 underline underline-offset-2 hover:text-white"
+                onClick={() => void copyShareMessage()}
+                className="inline-flex w-full max-w-xs items-center justify-center gap-2 rounded-xl border border-white/35 bg-white/15 px-6 py-3 text-sm font-semibold text-white shadow-sm backdrop-blur-sm transition hover:bg-white/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime-300 sm:w-auto sm:max-w-none"
               >
-                Copy link instead
+                Copy message
               </button>
               {shareHint === "copied" && (
                 <p className="text-sm text-lime-300" role="status">
-                  Link copied to clipboard
+                  Copied — paste into WhatsApp or any chat
                 </p>
               )}
               {shareHint === "error" && (
                 <p className="text-sm text-red-200" role="alert">
-                  Could not copy the link. Please copy it from your browser&apos;s address bar after opening the webinar page.
+                  Could not copy. Try sharing from the button above, or copy the registration link from your browser.
                 </p>
               )}
             </div>

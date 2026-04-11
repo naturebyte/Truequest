@@ -75,3 +75,18 @@ export function absoluteUrlForPublicPath(publicPath: string | null): string | nu
   }
   return `${base}${publicPath.startsWith("/") ? publicPath : `/${publicPath}`}`;
 }
+
+/** Public registration URL for crawlers and share sheets (uses NEXT_PUBLIC_SITE_URL when set). */
+export function absoluteWebinarRegistrationUrl(slug: string): string {
+  const base = getPublicSiteBaseUrl();
+  const segment = encodeURIComponent(slug.trim().toLowerCase());
+  return `${base}/forms/webinar/${segment}`;
+}
+
+/** Plain-text body for WhatsApp / system share (URL must be absolute HTTPS in production). */
+export function buildWebinarShareBody(webinarTitle: string, registrationAbsoluteUrl: string): string {
+  const titleLine = webinarTitle.trim()
+    ? `Register for this TrueQuest webinar: ${webinarTitle.trim()}`
+    : "Register for this TrueQuest webinar";
+  return `${titleLine}\n\n🎓 Chance to win scholarships up to ₹100000\n\nRegister Now 👉 ${registrationAbsoluteUrl}`;
+}

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { sql } from "@/lib/db";
-import { ensureWebinarTables } from "@/lib/webinar-db";
+import { ensureWebinarTablesOnce, listActiveWebinarsForPublic } from "@/lib/webinar-db";
 import nodemailer from "nodemailer";
 import { createDecipheriv, scryptSync } from "crypto";
+import { WEBINAR_DUPLICATE_PHONE_MESSAGE } from "@/lib/webinar-registration-messages";
 import { absoluteUrlForPublicPath, normalizePublicAssetPath, parseWebinarSlug } from "@/lib/webinar-utils";
 
 function escapeHtmlAttribute(value: string): string {
@@ -200,19 +202,7 @@ async function sendWebinarConfirmationEmail(params: {
 
 export async function GET() {
   try {
-    await ensureWebinarTables();
-    const webinarsRaw = (await sql`
-      SELECT id, slug, title, event_date, event_time, location, is_active, banner_image_path
-      FROM webinars
-      WHERE is_active = true
-      ORDER BY event_date ASC, event_time ASC
-    `) as WebinarRow[];
-
-    const webinars = webinarsRaw.map((w) => ({
-      ...w,
-      banner_image_path: normalizePublicAssetPath(w.banner_image_path),
-    }));
-
+    const webinars = await listActiveWebinarsForPublic();
     return NextResponse.json({ webinars }, { status: 200 });
   } catch (error) {
     console.error("Error fetching webinars:", error);
@@ -222,17 +212,21 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    await ensureWebinarTables();
+    await ensureWebinarTablesOnce();
     const body = await req.json().catch(() => ({}));
 
     const name = normalizeString(body.name);
-    const phoneNumber = normalizeString(body.phoneNumber);
+    const phoneDigits = normalizeString(body.phoneNumber).replace(/\D/g, "");
     const emailId = normalizeString(body.emailId).toLowerCase();
     const qualification = parseQualification(body.qualification);
     const webinarSlug = parseWebinarSlug(body.webinarSlug);
 
-    if (!name || !phoneNumber || !emailId || !qualification || !webinarSlug) {
+    if (!name || !emailId || !qualification || !webinarSlug) {
       return NextResponse.json({ error: "Please fill all required fields." }, { status: 400 });
+    }
+
+    if (phoneDigits.length !== 10) {
+      return NextResponse.json({ error: "Please enter a valid 10-digit phone number." }, { status: 400 });
     }
 
     if (!emailId.includes("@")) {
@@ -255,20 +249,34 @@ export async function POST(req: NextRequest) {
       banner_image_path: normalizePublicAssetPath(webinarRaw.banner_image_path),
     };
 
+    const duplicateRows = (await sql`
+      SELECT id
+      FROM webinar_registrations
+      WHERE webinar_id = ${webinar.id}
+        AND regexp_replace(phone_number, '[^0-9]', '', 'g') = ${phoneDigits}
+      LIMIT 1
+    `) as { id: number }[];
+
+    if (duplicateRows.length > 0) {
+      return NextResponse.json({ error: WEBINAR_DUPLICATE_PHONE_MESSAGE }, { status: 409 });
+    }
+
     await sql`
       INSERT INTO webinar_registrations (name, phone_number, email_id, qualification, webinar_id)
-      VALUES (${name}, ${phoneNumber}, ${emailId}, ${qualification}, ${webinar.id})
+      VALUES (${name}, ${phoneDigits}, ${emailId}, ${qualification}, ${webinar.id})
     `;
 
-    try {
-      await sendWebinarConfirmationEmail({
-        studentName: name,
-        emailId,
-        webinar,
-      });
-    } catch (mailError) {
-      console.error("Webinar confirmation email send failed:", mailError);
-    }
+    after(async () => {
+      try {
+        await sendWebinarConfirmationEmail({
+          studentName: name,
+          emailId,
+          webinar,
+        });
+      } catch (mailError) {
+        console.error("Webinar confirmation email send failed:", mailError);
+      }
+    });
 
     return NextResponse.json(
       {
