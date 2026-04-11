@@ -126,7 +126,7 @@ export default function WebinarRegistrationClient({
             </div>
           ) : (
             <Image
-              src="/banner.png"
+              src="/banner.jpg"
               alt="TrueQuest Learning"
               width={900}
               height={360}

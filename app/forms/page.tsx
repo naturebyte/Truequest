@@ -7,7 +7,7 @@ export default function FormsDashboardPage() {
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
         <div className="mb-10 flex flex-col items-center text-center">
           <Image
-            src="/banner.png"
+            src="/banner.jpg"
             alt="TrueQuest Learning"
             width={900}
             height={360}

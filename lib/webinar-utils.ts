@@ -16,14 +16,34 @@ export function parseWebinarSlug(value: unknown): string {
   return typeof value === "string" ? value.trim().toLowerCase() : "";
 }
 
-/** Accepts /path/to/file.jpg or path/to/file.jpg → always /... */
+/**
+ * Accepts /path/to/file.jpg, path/to/file.jpg, or a full https URL to this site
+ * → a single path starting with `/` under `public/` (safe for next/image `src`).
+ */
 export function normalizePublicAssetPath(value: unknown): string | null {
+  if (value == null) {
+    return null;
+  }
   const raw = typeof value === "string" ? value.trim() : "";
   if (!raw) {
     return null;
   }
+
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const u = new URL(raw);
+      const path = u.pathname;
+      if (!path.startsWith("/") || path.includes("..") || path.includes("//")) {
+        return null;
+      }
+      return path;
+    } catch {
+      return null;
+    }
+  }
+
   const path = raw.startsWith("/") ? raw : `/${raw}`;
-  if (path.includes("..") || path.includes("//")) {
+  if (path.includes("..") || path.slice(1).includes("//")) {
     return null;
   }
   return path;

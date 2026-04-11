@@ -47,7 +47,7 @@ WhatsApp: https://api.whatsapp.com/send/?phone=919778303913`;
     <main className="min-h-screen bg-linear-to-br from-[#221bff] via-[#2b24ff] to-[#3f37ff] py-10 text-white sm:py-16">
       <div className="mx-auto max-w-3xl px-4 sm:px-6 text-center">
         <Image
-          src="/banner.png"
+          src="/banner.jpg"
           alt="TrueQuest Learning"
           width={900}
           height={360}

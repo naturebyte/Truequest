@@ -104,7 +104,7 @@ export default function WebinarConfirmationClient({
     await copyRegistrationLink();
   }, [copyRegistrationLink, registrationUrl, webinarTitle]);
 
-  const heroSrc = webinarBannerImage?.trim() || "/banner.png";
+  const heroSrc = webinarBannerImage?.trim() || "/banner.jpg";
   const heroAlt = webinarTitle.trim() ? webinarTitle : "TrueQuest Learning";
   const canShare = Boolean(webinarSlug);
 

@@ -3,7 +3,7 @@ import { sql } from "@/lib/db";
 import { ensureWebinarTables } from "@/lib/webinar-db";
 import nodemailer from "nodemailer";
 import { createDecipheriv, scryptSync } from "crypto";
-import { absoluteUrlForPublicPath, parseWebinarSlug } from "@/lib/webinar-utils";
+import { absoluteUrlForPublicPath, normalizePublicAssetPath, parseWebinarSlug } from "@/lib/webinar-utils";
 
 function escapeHtmlAttribute(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
@@ -201,12 +201,17 @@ async function sendWebinarConfirmationEmail(params: {
 export async function GET() {
   try {
     await ensureWebinarTables();
-    const webinars = (await sql`
+    const webinarsRaw = (await sql`
       SELECT id, slug, title, event_date, event_time, location, is_active, banner_image_path
       FROM webinars
       WHERE is_active = true
       ORDER BY event_date ASC, event_time ASC
     `) as WebinarRow[];
+
+    const webinars = webinarsRaw.map((w) => ({
+      ...w,
+      banner_image_path: normalizePublicAssetPath(w.banner_image_path),
+    }));
 
     return NextResponse.json({ webinars }, { status: 200 });
   } catch (error) {
@@ -240,10 +245,15 @@ export async function POST(req: NextRequest) {
       WHERE slug = ${webinarSlug}
       LIMIT 1
     `) as WebinarRow[];
-    const webinar = webinarRows[0];
-    if (!webinar || !webinar.is_active) {
+    const webinarRaw = webinarRows[0];
+    if (!webinarRaw || !webinarRaw.is_active) {
       return NextResponse.json({ error: "Selected webinar not found." }, { status: 404 });
     }
+
+    const webinar: WebinarRow = {
+      ...webinarRaw,
+      banner_image_path: normalizePublicAssetPath(webinarRaw.banner_image_path),
+    };
 
     await sql`
       INSERT INTO webinar_registrations (name, phone_number, email_id, qualification, webinar_id)

@@ -1,3 +1,4 @@
+import { normalizePublicAssetPath } from "@/lib/webinar-utils";
 import ConfirmationClient from "./ConfirmationClient";
 
 type WebinarConfirmationPageProps = {
@@ -20,7 +21,9 @@ export default async function WebinarConfirmationPage({ searchParams }: WebinarC
       webinarDate={params.date || ""}
       webinarTime={params.time || ""}
       webinarLocation={params.location || "Sultan Bathery, Wayanad"}
-      webinarBannerImage={params.bannerImage ? decodeURIComponent(params.bannerImage) : ""}
+      webinarBannerImage={
+        normalizePublicAssetPath(params.bannerImage ? decodeURIComponent(params.bannerImage) : null) || ""
+      }
       webinarSlug={(params.slug || "").trim().toLowerCase()}
     />
   );

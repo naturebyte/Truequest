@@ -150,7 +150,7 @@ export default function StudentRegistrationPage() {
       <div className="mx-auto max-w-3xl px-4 sm:px-6">
         <div className="text-center">
           <Image
-            src="/banner.png"
+            src="/banner.jpg"
             alt="TrueQuest Learning"
             width={900}
             height={360}

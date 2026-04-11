@@ -1,4 +1,5 @@
 import { sql } from "@/lib/db";
+import { normalizePublicAssetPath } from "@/lib/webinar-utils";
 
 export type PublicWebinarRow = {
   id: number;
@@ -97,5 +98,13 @@ export async function getActiveWebinarBySlug(rawSlug: string): Promise<PublicWeb
     LIMIT 1
   `) as PublicWebinarRow[];
 
-  return rows[0] ?? null;
+  const row = rows[0];
+  if (!row) {
+    return null;
+  }
+
+  return {
+    ...row,
+    banner_image_path: normalizePublicAssetPath(row.banner_image_path),
+  };
 }

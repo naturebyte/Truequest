@@ -71,7 +71,7 @@ export default function WebinarSelectPage() {
       <div className="mx-auto max-w-5xl px-4 sm:px-6">
         <div className="text-center">
           <Image
-            src="/banner.png"
+            src="/banner.jpg"
             alt="TrueQuest Learning"
             width={900}
             height={360}
