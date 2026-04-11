@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TrueQuest Learning – Coming Soon",
+  title: "TrueQuest Learning",
   description: "Learn skills. Build careers.",
 };
 

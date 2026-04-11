@@ -7,6 +7,7 @@ type WebinarConfirmationClientProps = {
   webinarDate: string;
   webinarTime: string;
   webinarLocation: string;
+  webinarBannerImage: string;
 };
 
 function formatWebinarDate(value: string): string {
@@ -42,18 +43,24 @@ export default function WebinarConfirmationClient({
   webinarDate,
   webinarTime,
   webinarLocation,
+  webinarBannerImage,
 }: WebinarConfirmationClientProps) {
+  const heroSrc = webinarBannerImage?.trim() || "/banner.png";
+  const heroAlt = webinarTitle.trim() ? webinarTitle : "TrueQuest Learning";
+
   return (
     <main className="min-h-screen bg-linear-to-br from-[#221bff] via-[#2b24ff] to-[#3f37ff] py-10 text-white sm:py-16">
       <div className="mx-auto max-w-3xl px-4 sm:px-6 text-center">
-        <Image
-          src="/banner.png"
-          alt="TrueQuest Learning"
-          width={900}
-          height={360}
-          className="mx-auto w-full max-w-xl rounded-3xl shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
-          priority
-        />
+        <div className="mx-auto w-full max-w-xl overflow-hidden rounded-3xl shadow-[0_24px_80px_rgba(0,0,0,0.45)]">
+          <Image
+            src={heroSrc}
+            alt={heroAlt}
+            width={900}
+            height={360}
+            className="h-auto w-full object-cover"
+            priority
+          />
+        </div>
 
         <div className="mt-8 rounded-2xl border border-white/20 bg-white/10 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur-md sm:p-8">
           <h1 className="text-3xl font-bold sm:text-4xl">Registration Successful ✅</h1>

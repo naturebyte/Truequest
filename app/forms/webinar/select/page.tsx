@@ -36,7 +36,15 @@ export default function WebinarSelectPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [webinars, setWebinars] = useState<
-    Array<{ id: number; title: string; event_date: string; event_time: string; location: string }>
+    Array<{
+      id: number;
+      slug: string;
+      title: string;
+      event_date: string;
+      event_time: string;
+      location: string;
+      banner_image_path: string | null;
+    }>
   >([]);
 
   useEffect(() => {
@@ -97,7 +105,7 @@ export default function WebinarSelectPage() {
                 </p>
                 <p className="mt-1 text-sm text-white/80">{webinar.location}</p>
                 <Link
-                  href={`/forms/webinar?webinarId=${webinar.id}`}
+                  href={`/forms/webinar/${encodeURIComponent(webinar.slug)}`}
                   className="mt-4 inline-block rounded-xl bg-lime-400 px-4 py-2 font-semibold text-black transition hover:bg-lime-300"
                 >
                   Register for this Webinar

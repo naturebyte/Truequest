@@ -77,7 +77,7 @@ export type WebinarRegistrationRecord = {
   name: string;
   phone_number: string;
   email_id: string;
-  qualification: "12" | "Degree" | "Pg" | "Other";
+  qualification: "12" | "Degree" | "PG" | "Other";
   webinar_id: number | null;
   webinar_title: string | null;
   webinar_date: string | null;
@@ -87,10 +87,12 @@ export type WebinarRegistrationRecord = {
 
 export type WebinarRecord = {
   id: number;
+  slug: string;
   title: string;
   event_date: string;
   event_time: string;
   location: string;
+  banner_image_path: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

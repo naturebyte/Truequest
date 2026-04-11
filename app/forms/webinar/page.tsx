@@ -1,10 +1,5 @@
-import WebinarRegistrationClient from "./WebinarRegistrationClient";
+import { redirect } from "next/navigation";
 
-type WebinarRegistrationPageProps = {
-  searchParams: Promise<{ webinarId?: string }>;
-};
-
-export default async function WebinarRegistrationPage({ searchParams }: WebinarRegistrationPageProps) {
-  const params = await searchParams;
-  return <WebinarRegistrationClient webinarIdParam={params.webinarId} />;
+export default function WebinarRegistrationRootPage() {
+  redirect("/forms/webinar/select");
 }

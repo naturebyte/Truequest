@@ -1,16 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sql } from "@/lib/db";
+import { ensureWebinarTables } from "@/lib/webinar-db";
 import nodemailer from "nodemailer";
 import { createDecipheriv, scryptSync } from "crypto";
+import { absoluteUrlForPublicPath, parseWebinarSlug } from "@/lib/webinar-utils";
 
-type QualificationOption = "12" | "Degree" | "Pg" | "Other";
+function escapeHtmlAttribute(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+}
+
+type QualificationOption = "12" | "Degree" | "PG" | "Other";
 type WebinarRow = {
   id: number;
+  slug: string;
   title: string;
   event_date: string;
   event_time: string;
   location: string;
   is_active: boolean;
+  banner_image_path: string | null;
 };
 
 function normalizeString(value: unknown): string {
@@ -19,7 +27,7 @@ function normalizeString(value: unknown): string {
 
 function parseQualification(value: unknown): QualificationOption | null {
   const parsed = normalizeString(value);
-  if (parsed === "12" || parsed === "Degree" || parsed === "Pg" || parsed === "Other") {
+  if (parsed === "12" || parsed === "Degree" || parsed === "PG" || parsed === "Other") {
     return parsed;
   }
   return null;
@@ -55,55 +63,19 @@ function decryptSmtpPassword(value: string): string {
   return decrypted.toString("utf8");
 }
 
-async function ensureWebinarTables() {
-  await sql`
-    CREATE TABLE IF NOT EXISTS webinars (
-      id serial PRIMARY KEY,
-      title text NOT NULL,
-      event_date date NOT NULL,
-      event_time time NOT NULL,
-      location text NOT NULL DEFAULT 'Sultan Bathery, Wayanad',
-      is_active boolean NOT NULL DEFAULT true,
-      created_at timestamptz DEFAULT now(),
-      updated_at timestamptz DEFAULT now()
-    )
-  `;
-
-  await sql`
-    ALTER TABLE webinars
-    ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true
-  `;
-
-  await sql`
-    CREATE TABLE IF NOT EXISTS webinar_registrations (
-      id serial PRIMARY KEY,
-      name text NOT NULL,
-      phone_number text NOT NULL,
-      email_id text NOT NULL,
-      qualification text NOT NULL,
-      webinar_id integer REFERENCES webinars(id) ON DELETE CASCADE,
-      created_at timestamptz DEFAULT now()
-    )
-  `;
-
-  await sql`
-    ALTER TABLE webinar_registrations
-    ADD COLUMN IF NOT EXISTS webinar_id integer
-  `;
-
-  await sql`
-    ALTER TABLE webinar_registrations
-    DROP CONSTRAINT IF EXISTS webinar_registrations_webinar_id_fkey
-  `;
-
-  await sql`
-    ALTER TABLE webinar_registrations
-    ADD CONSTRAINT webinar_registrations_webinar_id_fkey
-    FOREIGN KEY (webinar_id) REFERENCES webinars(id) ON DELETE CASCADE
-  `;
-}
-
 function buildWebinarConfirmationHtml(studentName: string, webinar: WebinarRow): string {
+  const bannerSrc = absoluteUrlForPublicPath(webinar.banner_image_path);
+  const bannerBlock = bannerSrc
+    ? `<div style="margin:0 0 14px 0;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+                  <img
+                    src="${bannerSrc}"
+                    alt="${escapeHtmlAttribute(webinar.title)}"
+                    width="584"
+                    style="display:block;width:100%;height:auto;"
+                  />
+                </div>`
+    : "";
+
   return `<!doctype html>
 <html>
   <body style="margin:0;padding:0;background:#eef2ff;font-family:Arial,sans-serif;color:#0f172a;">
@@ -121,6 +93,7 @@ function buildWebinarConfirmationHtml(studentName: string, webinar: WebinarRow):
             </tr>
             <tr>
               <td style="padding:24px 28px;">
+                ${bannerBlock}
                 <p style="margin:0 0 12px 0;font-size:14px;line-height:1.7;">Hi ${studentName},</p>
                 <p style="margin:0 0 12px 0;font-size:14px;line-height:1.7;">
                   We’re excited to have you join our FREE Offline Webinar on
@@ -201,21 +174,26 @@ async function sendWebinarConfirmationEmail(params: {
   const fromName = (process.env.SMTP_FROM_NAME || "TrueQuest Learning").trim();
   const fromAddress = `${fromName} <${smtpUser}>`;
 
+  const bannerAbs = absoluteUrlForPublicPath(params.webinar.banner_image_path);
+  const textLines = [
+    "Registration Confirmed",
+    "",
+    "You’ve chosen the right step towards your future.",
+    `Webinar: ${params.webinar.title}`,
+    `Date: ${params.webinar.event_date}`,
+    `Time: ${params.webinar.event_time.slice(0, 5)}`,
+    `Location: ${params.webinar.location}`,
+  ];
+  if (bannerAbs) {
+    textLines.push(`Banner: ${bannerAbs}`);
+  }
+  textLines.push("", "Get ready for expert career guidance and scholarship opportunities.");
+
   await transporter.sendMail({
     from: fromAddress,
     to: params.emailId,
     subject: "TrueQuest Learning | Webinar Registration Confirmation",
-    text: [
-      "Registration Confirmed",
-      "",
-      "You’ve chosen the right step towards your future.",
-      `Webinar: ${params.webinar.title}`,
-      `Date: ${params.webinar.event_date}`,
-      `Time: ${params.webinar.event_time.slice(0, 5)}`,
-      `Location: ${params.webinar.location}`,
-      "",
-      "Get ready for expert career guidance and scholarship opportunities.",
-    ].join("\n"),
+    text: textLines.join("\n"),
     html: buildWebinarConfirmationHtml(params.studentName, params.webinar),
   });
 }
@@ -224,7 +202,7 @@ export async function GET() {
   try {
     await ensureWebinarTables();
     const webinars = (await sql`
-      SELECT id, title, event_date, event_time, location, is_active
+      SELECT id, slug, title, event_date, event_time, location, is_active, banner_image_path
       FROM webinars
       WHERE is_active = true
       ORDER BY event_date ASC, event_time ASC
@@ -246,9 +224,9 @@ export async function POST(req: NextRequest) {
     const phoneNumber = normalizeString(body.phoneNumber);
     const emailId = normalizeString(body.emailId).toLowerCase();
     const qualification = parseQualification(body.qualification);
-    const webinarId = Number(body.webinarId);
+    const webinarSlug = parseWebinarSlug(body.webinarSlug);
 
-    if (!name || !phoneNumber || !emailId || !qualification || !webinarId) {
+    if (!name || !phoneNumber || !emailId || !qualification || !webinarSlug) {
       return NextResponse.json({ error: "Please fill all required fields." }, { status: 400 });
     }
 
@@ -257,9 +235,9 @@ export async function POST(req: NextRequest) {
     }
 
     const webinarRows = (await sql`
-      SELECT id, title, event_date, event_time, location, is_active
+      SELECT id, slug, title, event_date, event_time, location, is_active, banner_image_path
       FROM webinars
-      WHERE id = ${webinarId}
+      WHERE slug = ${webinarSlug}
       LIMIT 1
     `) as WebinarRow[];
     const webinar = webinarRows[0];
@@ -269,7 +247,7 @@ export async function POST(req: NextRequest) {
 
     await sql`
       INSERT INTO webinar_registrations (name, phone_number, email_id, qualification, webinar_id)
-      VALUES (${name}, ${phoneNumber}, ${emailId}, ${qualification}, ${webinarId})
+      VALUES (${name}, ${phoneNumber}, ${emailId}, ${qualification}, ${webinar.id})
     `;
 
     try {
@@ -289,6 +267,7 @@ export async function POST(req: NextRequest) {
         webinarDate: webinar.event_date,
         webinarTime: webinar.event_time,
         webinarLocation: webinar.location,
+        webinarBannerImage: webinar.banner_image_path || "",
       },
       { status: 200 },
     );

@@ -6,6 +6,12 @@ import {
   getAdminCookieName,
   getAdminSessionSecret,
 } from "@/lib/admin-auth";
+import {
+  isValidWebinarSlug,
+  normalizePublicAssetPath,
+  parseWebinarSlug,
+  slugifyTitle,
+} from "@/lib/webinar-utils";
 
 type CourseSelection = "DM" | "HR" | null;
 type FeePlan = "monthly_3x" | "one_time";
@@ -13,6 +19,21 @@ const REGISTRATION_NUMBER_BASE = 786;
 
 function normalizeString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+async function ensureUniqueWebinarSlug(baseSlug: string): Promise<string> {
+  const trimmedBase = baseSlug.slice(0, 100);
+  let candidate = trimmedBase;
+  for (let suffix = 0; suffix < 50; suffix++) {
+    const rows = (await sql`
+      SELECT id FROM webinars WHERE slug = ${candidate} LIMIT 1
+    `) as Array<{ id: number }>;
+    if (!rows[0]) {
+      return candidate;
+    }
+    candidate = `${trimmedBase}-${suffix + 2}`.slice(0, 120);
+  }
+  return `${trimmedBase}-${Date.now()}`.slice(0, 120);
 }
 
 function parseCourse(value: unknown): CourseSelection {
@@ -432,6 +453,31 @@ async function ensureTables() {
   `;
 
   await sql`
+    ALTER TABLE webinars
+    ADD COLUMN IF NOT EXISTS slug text
+  `;
+
+  await sql`
+    ALTER TABLE webinars
+    ADD COLUMN IF NOT EXISTS banner_image_path text
+  `;
+
+  await sql`
+    UPDATE webinars
+    SET slug = 'webinar-' || id::text
+    WHERE slug IS NULL OR trim(slug) = ''
+  `;
+
+  await sql`
+    ALTER TABLE webinars
+    ALTER COLUMN slug SET NOT NULL
+  `;
+
+  await sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS webinars_slug_unique_idx ON webinars (slug)
+  `;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS webinar_registrations (
       id serial PRIMARY KEY,
       name text NOT NULL,
@@ -621,15 +667,17 @@ export async function GET(req: NextRequest) {
     }>;
 
     const webinars = (await sql`
-      SELECT id, title, event_date, event_time, location, is_active, created_at, updated_at
+      SELECT id, slug, title, event_date, event_time, location, banner_image_path, is_active, created_at, updated_at
       FROM webinars
       ORDER BY event_date DESC, event_time DESC
     `) as Array<{
       id: number;
+      slug: string;
       title: string;
       event_date: string;
       event_time: string;
       location: string;
+      banner_image_path: string | null;
       is_active: boolean;
       created_at: string;
       updated_at: string;
@@ -655,7 +703,7 @@ export async function GET(req: NextRequest) {
       name: string;
       phone_number: string;
       email_id: string;
-      qualification: "12" | "Degree" | "Pg" | "Other";
+      qualification: "12" | "Degree" | "PG" | "Other";
       webinar_id: number | null;
       webinar_title: string | null;
       webinar_date: string | null;
@@ -809,9 +857,32 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      let slugInput = parseWebinarSlug(body.slug);
+      if (!slugInput) {
+        slugInput = slugifyTitle(title);
+      }
+      if (!isValidWebinarSlug(slugInput)) {
+        slugInput = `${slugInput}-session`.slice(0, 120);
+      }
+      if (!isValidWebinarSlug(slugInput)) {
+        slugInput = `webinar-${Date.now()}`.slice(0, 120);
+      }
+      if (!isValidWebinarSlug(slugInput)) {
+        return NextResponse.json(
+          {
+            error:
+              "Invalid URL slug. Use 3–120 characters: lowercase letters, numbers, and single hyphens between words.",
+          },
+          { status: 400 },
+        );
+      }
+
+      const slug = await ensureUniqueWebinarSlug(slugInput);
+      const bannerPath = normalizePublicAssetPath(body.bannerImagePath);
+
       await sql`
-        INSERT INTO webinars (title, event_date, event_time, location, updated_at)
-        VALUES (${title}, ${eventDate}, ${eventTime}, ${location}, now())
+        INSERT INTO webinars (title, event_date, event_time, location, slug, banner_image_path, updated_at)
+        VALUES (${title}, ${eventDate}, ${eventTime}, ${location}, ${slug}, ${bannerPath}, now())
       `;
       return NextResponse.json({ status: "ok" }, { status: 200 });
     }
@@ -857,14 +928,41 @@ export async function PATCH(req: NextRequest) {
       const eventDate = normalizeString(body.eventDate);
       const eventTime = normalizeString(body.eventTime);
       const location = normalizeString(body.location) || "Sultan Bathery, Wayanad";
+      const slugInput = parseWebinarSlug(body.slug);
 
-      if (!id || !title || !eventDate || !eventTime) {
+      if (!id || !title || !eventDate || !eventTime || !slugInput) {
         return NextResponse.json({ error: "Invalid webinar update data." }, { status: 400 });
       }
 
+      if (!isValidWebinarSlug(slugInput)) {
+        return NextResponse.json(
+          {
+            error:
+              "Invalid URL slug. Use 3–120 characters: lowercase letters, numbers, and single hyphens between words.",
+          },
+          { status: 400 },
+        );
+      }
+
+      const slugTaken = (await sql`
+        SELECT id FROM webinars WHERE slug = ${slugInput} AND id <> ${id} LIMIT 1
+      `) as Array<{ id: number }>;
+      if (slugTaken[0]) {
+        return NextResponse.json({ error: "This URL slug is already used by another webinar." }, { status: 409 });
+      }
+
+      const bannerPath = normalizePublicAssetPath(body.bannerImagePath);
+
       await sql`
         UPDATE webinars
-        SET title = ${title}, event_date = ${eventDate}, event_time = ${eventTime}, location = ${location}, updated_at = now()
+        SET
+          title = ${title},
+          event_date = ${eventDate},
+          event_time = ${eventTime},
+          location = ${location},
+          slug = ${slugInput},
+          banner_image_path = ${bannerPath},
+          updated_at = now()
         WHERE id = ${id}
       `;
       return NextResponse.json({ status: "ok" }, { status: 200 });

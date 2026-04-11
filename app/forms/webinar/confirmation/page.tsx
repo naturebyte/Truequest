@@ -1,7 +1,13 @@
 import ConfirmationClient from "./ConfirmationClient";
 
 type WebinarConfirmationPageProps = {
-  searchParams: Promise<{ title?: string; date?: string; time?: string; location?: string }>;
+  searchParams: Promise<{
+    title?: string;
+    date?: string;
+    time?: string;
+    location?: string;
+    bannerImage?: string;
+  }>;
 };
 
 export default async function WebinarConfirmationPage({ searchParams }: WebinarConfirmationPageProps) {
@@ -13,6 +19,7 @@ export default async function WebinarConfirmationPage({ searchParams }: WebinarC
       webinarDate={params.date || ""}
       webinarTime={params.time || ""}
       webinarLocation={params.location || "Sultan Bathery, Wayanad"}
+      webinarBannerImage={params.bannerImage ? decodeURIComponent(params.bannerImage) : ""}
     />
   );
 }

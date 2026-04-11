@@ -136,13 +136,15 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
   const [smtpInfoMessage, setSmtpInfoMessage] = useState("");
   const [sendingNotificationEmail, setSendingNotificationEmail] = useState<string | null>(null);
   const [webinarTitleInput, setWebinarTitleInput] = useState("");
+  const [webinarSlugInput, setWebinarSlugInput] = useState("");
+  const [webinarBannerPathInput, setWebinarBannerPathInput] = useState("");
   const [webinarDateInput, setWebinarDateInput] = useState("");
   const [webinarTimeInput, setWebinarTimeInput] = useState("");
   const [webinarLocationInput, setWebinarLocationInput] = useState("Sultan Bathery, Wayanad");
   const [editingWebinarId, setEditingWebinarId] = useState<number | null>(null);
   const [selectedWebinarFilter, setSelectedWebinarFilter] = useState<"all" | number>("all");
   const [webinarRegistrationSearchTerm, setWebinarRegistrationSearchTerm] = useState("");
-  const [copiedWebinarId, setCopiedWebinarId] = useState<number | null>(null);
+  const [copiedWebinarSlug, setCopiedWebinarSlug] = useState<string | null>(null);
 
   async function fetchRegistrations() {
     try {
@@ -451,6 +453,8 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
   function resetWebinarForm() {
     setEditingWebinarId(null);
     setWebinarTitleInput("");
+    setWebinarSlugInput("");
+    setWebinarBannerPathInput("");
     setWebinarDateInput("");
     setWebinarTimeInput("");
     setWebinarLocationInput("Sultan Bathery, Wayanad");
@@ -470,6 +474,8 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
           action,
           id: editingWebinarId,
           title: webinarTitleInput,
+          slug: webinarSlugInput,
+          bannerImagePath: webinarBannerPathInput,
           eventDate: webinarDateInput,
           eventTime: webinarTimeInput,
           location: webinarLocationInput,
@@ -492,13 +498,17 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
   function startWebinarEdit(webinar: WebinarRecord) {
     setEditingWebinarId(webinar.id);
     setWebinarTitleInput(webinar.title);
+    setWebinarSlugInput(webinar.slug);
+    setWebinarBannerPathInput(webinar.banner_image_path || "");
     setWebinarDateInput(toDateInputValue(webinar.event_date));
     setWebinarTimeInput((webinar.event_time || "").slice(0, 5));
     setWebinarLocationInput(webinar.location || "Sultan Bathery, Wayanad");
   }
 
   async function handleWebinarDelete(id: number) {
-    const isConfirmed = window.confirm("Delete this webinar? Linked registrations will be kept.");
+    const isConfirmed = window.confirm(
+      "Delete this webinar? All registrations for this webinar will also be deleted.",
+    );
     if (!isConfirmed) {
       return;
     }
@@ -549,12 +559,12 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
     }
   }
 
-  async function handleCopyWebinarLink(webinarId: number) {
+  async function handleCopyWebinarLink(slug: string) {
     try {
-      const webinarUrl = `${window.location.origin}/forms/webinar?webinarId=${webinarId}`;
+      const webinarUrl = `${window.location.origin}/forms/webinar/${encodeURIComponent(slug)}`;
       await navigator.clipboard.writeText(webinarUrl);
-      setCopiedWebinarId(webinarId);
-      setTimeout(() => setCopiedWebinarId(null), 2000);
+      setCopiedWebinarSlug(slug);
+      setTimeout(() => setCopiedWebinarSlug(null), 2000);
     } catch {
       setErrorMessage("Unable to copy webinar link.");
     }
@@ -1493,6 +1503,18 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                     className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
                   />
                   <input
+                    value={webinarSlugInput}
+                    onChange={(event) => setWebinarSlugInput(event.target.value.toLowerCase())}
+                    placeholder="URL slug (optional, e.g. april-career-day)"
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                  />
+                  <input
+                    value={webinarBannerPathInput}
+                    onChange={(event) => setWebinarBannerPathInput(event.target.value)}
+                    placeholder="Banner path: /webinar/your-image.jpg (file in public/)"
+                    className="md:col-span-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                  />
+                  <input
                     type="date"
                     required
                     value={webinarDateInput}
@@ -1538,6 +1560,7 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50 text-slate-700">
                         <th className="px-3 py-2">Title</th>
+                        <th className="px-3 py-2">Slug / link</th>
                         <th className="px-3 py-2">Date</th>
                         <th className="px-3 py-2">Time</th>
                         <th className="px-3 py-2">Location</th>
@@ -1549,6 +1572,7 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                       {webinars.map((webinar) => (
                         <tr key={webinar.id} className="border-b border-slate-100 text-slate-700">
                           <td className="px-3 py-2">{webinar.title}</td>
+                          <td className="px-3 py-2 font-mono text-xs text-slate-600">/{webinar.slug}</td>
                           <td className="px-3 py-2">{formatDate(webinar.event_date)}</td>
                           <td className="px-3 py-2">{(webinar.event_time || "").slice(0, 5)}</td>
                           <td className="px-3 py-2">{webinar.location}</td>
@@ -1574,10 +1598,10 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                               </button>
                               <button
                                 type="button"
-                                onClick={() => void handleCopyWebinarLink(webinar.id)}
+                                onClick={() => void handleCopyWebinarLink(webinar.slug)}
                                 className="rounded-lg border border-[#2b24ff]/20 bg-[#2b24ff]/10 px-3 py-1.5 text-[#2b24ff] hover:bg-[#2b24ff]/15"
                               >
-                                {copiedWebinarId === webinar.id ? "Copied Link" : "Copy Link"}
+                                {copiedWebinarSlug === webinar.slug ? "Copied Link" : "Copy Link"}
                               </button>
                               <button
                                 type="button"
@@ -1599,7 +1623,7 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                       ))}
                       {webinars.length === 0 && (
                         <tr>
-                          <td colSpan={6} className="px-3 py-5 text-center text-slate-500">
+                          <td colSpan={7} className="px-3 py-5 text-center text-slate-500">
                             No webinars created yet.
                           </td>
                         </tr>
