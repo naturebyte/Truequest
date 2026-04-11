@@ -1,3 +1,5 @@
+import type { WebinarRegistrationRecord } from "./types";
+
 export function getErrorMessage(error: unknown, fallbackMessage: string): string {
   if (error instanceof Error && error.message) {
     return error.message;
@@ -61,4 +63,25 @@ export function toDateInputValue(value: string | null | undefined): string {
   }
 
   return parsedDate.toISOString().slice(0, 10);
+}
+
+export async function downloadWebinarRegistrationsExcel(
+  rows: WebinarRegistrationRecord[],
+): Promise<void> {
+  const XLSX = await import("xlsx");
+  const sheetRows = rows.map((row) => ({
+    "Webinar title": row.webinar_title || "Unassigned webinar",
+    "Webinar date": row.webinar_date ? formatDate(row.webinar_date) : "",
+    "Webinar time": row.webinar_time ? row.webinar_time.slice(0, 5) : "",
+    Name: row.name,
+    Phone: row.phone_number,
+    Email: row.email_id,
+    Qualification: row.qualification,
+    "Submitted on": formatDate(row.created_at),
+  }));
+  const worksheet = XLSX.utils.json_to_sheet(sheetRows);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Registrations");
+  const stamp = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(workbook, `webinar-registrations-${stamp}.xlsx`);
 }

@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { getActiveWebinarBySlug } from "@/lib/webinar-db";
 import {
   absoluteUrlForPublicPath,
   absoluteWebinarRegistrationUrl,
-  getPublicSiteBaseUrl,
+  getPublicSiteBaseUrlFromHeaders,
 } from "@/lib/webinar-utils";
 import WebinarRegistrationClient from "../WebinarRegistrationClient";
 
@@ -17,8 +18,9 @@ export async function generateMetadata({ params }: WebinarBySlugPageProps): Prom
   const normalizedSlug = decoded.trim().toLowerCase();
   const row = await getActiveWebinarBySlug(decoded);
 
-  const base = getPublicSiteBaseUrl();
-  const canonical = absoluteWebinarRegistrationUrl(normalizedSlug);
+  const headerList = await headers();
+  const base = getPublicSiteBaseUrlFromHeaders(headerList);
+  const canonical = absoluteWebinarRegistrationUrl(normalizedSlug, base);
 
   const description = row?.title
     ? `Register for this TrueQuest webinar: ${row.title}. Free offline webinar with expert career guidance and scholarship opportunities.`
@@ -27,9 +29,9 @@ export async function generateMetadata({ params }: WebinarBySlugPageProps): Prom
   const pageTitle = row?.title ? `${row.title} | TrueQuest Learning` : "Webinar registration | TrueQuest Learning";
   const ogHeading = row?.title ? `Register — ${row.title}` : "TrueQuest webinar registration";
 
-  const fallbackImage = absoluteUrlForPublicPath("/banner.jpg") ?? `${base}/banner.jpg`;
+  const fallbackImage = absoluteUrlForPublicPath("/banner.jpg", base) ?? `${base}/banner.jpg`;
   const bannerImage =
-    row?.banner_image_path != null ? absoluteUrlForPublicPath(row.banner_image_path) : null;
+    row?.banner_image_path != null ? absoluteUrlForPublicPath(row.banner_image_path, base) : null;
   const ogImage = bannerImage || fallbackImage;
 
   return {

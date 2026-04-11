@@ -18,6 +18,7 @@ import type {
   WebinarRegistrationRecord,
 } from "./types";
 import {
+  downloadWebinarRegistrationsExcel,
   formatCurrency,
   formatDate,
   getAgeFromDateOfBirth,
@@ -144,6 +145,7 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
   const [editingWebinarId, setEditingWebinarId] = useState<number | null>(null);
   const [selectedWebinarFilter, setSelectedWebinarFilter] = useState<"all" | number>("all");
   const [webinarRegistrationSearchTerm, setWebinarRegistrationSearchTerm] = useState("");
+  const [isExportingWebinarExcel, setIsExportingWebinarExcel] = useState(false);
   const [copiedWebinarSlug, setCopiedWebinarSlug] = useState<string | null>(null);
 
   async function fetchRegistrations() {
@@ -943,6 +945,21 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
     return groups;
   }, []);
 
+  async function handleExportWebinarRegistrationsExcel() {
+    if (searchedWebinarRegistrations.length === 0) {
+      return;
+    }
+    setIsExportingWebinarExcel(true);
+    setErrorMessage("");
+    try {
+      await downloadWebinarRegistrationsExcel(searchedWebinarRegistrations);
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, "Unable to export webinar registrations."));
+    } finally {
+      setIsExportingWebinarExcel(false);
+    }
+  }
+
   useEffect(() => {
     if (allowlistPage > allowlistTotalPages) {
       setAllowlistPage(allowlistTotalPages);
@@ -1660,6 +1677,16 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                         placeholder="Search name, phone, email..."
                         className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
                       />
+                      <button
+                        type="button"
+                        disabled={
+                          searchedWebinarRegistrations.length === 0 || isExportingWebinarExcel
+                        }
+                        onClick={() => void handleExportWebinarRegistrationsExcel()}
+                        className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {isExportingWebinarExcel ? "Exporting…" : "Export Excel"}
+                      </button>
                     </div>
                   </div>
                   <div className="mt-3 grid gap-4">

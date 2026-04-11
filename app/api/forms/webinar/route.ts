@@ -116,6 +116,9 @@ function buildWebinarConfirmationHtml(studentName: string, webinar: WebinarRow):
                 <p style="margin:0 0 12px 0;font-size:13px;line-height:1.8;color:#334155;">
                   Feel free to invite your friends and family who might be looking for the right career direction.
                 </p>
+                <p style="margin:0 0 12px 0;font-size:14px;line-height:1.7;color:#0f172a;">
+                  We’ll connect with you shortly for further updates, so stay tuned!
+                </p>
                 <p style="margin:16px 0 0 0;font-size:14px;line-height:1.7;">
                   Regards,<br/><strong>Team TrueQuest Learning</strong>
                 </p>
@@ -190,6 +193,7 @@ async function sendWebinarConfirmationEmail(params: {
     textLines.push(`Banner: ${bannerAbs}`);
   }
   textLines.push("", "Get ready for expert career guidance and scholarship opportunities.");
+  textLines.push("", "We’ll connect with you shortly for further updates, so stay tuned!");
 
   await transporter.sendMail({
     from: fromAddress,

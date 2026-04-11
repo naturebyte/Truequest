@@ -65,11 +65,29 @@ export function getPublicSiteBaseUrl(): string {
   return "https://truequestlearning.com";
 }
 
-export function absoluteUrlForPublicPath(publicPath: string | null): string | null {
+/**
+ * Uses the incoming request host so Open Graph / WhatsApp preview images match the URL users share
+ * (e.g. forms.truequestlearning.com vs apex). Falls back to env or default when headers are missing.
+ */
+export function getPublicSiteBaseUrlFromHeaders(headerList: { get(name: string): string | null }): string {
+  const rawHost = (headerList.get("x-forwarded-host") ?? headerList.get("host") ?? "").trim();
+  const host = rawHost.split(",")[0]?.trim() ?? "";
+  if (!host) {
+    return getPublicSiteBaseUrl();
+  }
+  const rawProto = (headerList.get("x-forwarded-proto") ?? "https").trim().split(",")[0]?.trim().toLowerCase() ?? "";
+  const proto = rawProto === "http" ? "http" : "https";
+  return `${proto}://${host}`;
+}
+
+export function absoluteUrlForPublicPath(
+  publicPath: string | null,
+  siteBaseUrl: string = getPublicSiteBaseUrl(),
+): string | null {
   if (!publicPath) {
     return null;
   }
-  const base = getPublicSiteBaseUrl();
+  const base = siteBaseUrl.replace(/\/+$/, "");
   if (publicPath.startsWith("http://") || publicPath.startsWith("https://")) {
     return publicPath;
   }
@@ -77,8 +95,8 @@ export function absoluteUrlForPublicPath(publicPath: string | null): string | nu
 }
 
 /** Public registration URL for crawlers and share sheets (uses NEXT_PUBLIC_SITE_URL when set). */
-export function absoluteWebinarRegistrationUrl(slug: string): string {
-  const base = getPublicSiteBaseUrl();
+export function absoluteWebinarRegistrationUrl(slug: string, siteBaseUrl: string = getPublicSiteBaseUrl()): string {
+  const base = siteBaseUrl.replace(/\/+$/, "");
   const segment = encodeURIComponent(slug.trim().toLowerCase());
   return `${base}/forms/webinar/${segment}`;
 }

@@ -138,6 +138,9 @@ export default function WebinarConfirmationClient({
           <p className="mt-2 text-white/85">
             This session will help you explore the right career path with expert guidance.
           </p>
+          <p className="mt-4 text-white/90">
+            We&apos;ll connect with you shortly for further updates, so stay tuned!
+          </p>
 
           {(webinarTitle || webinarDate || webinarTime || webinarLocation) && (
             <div className="mx-auto mt-6 max-w-xl rounded-xl border border-white/30 bg-white/10 p-4 text-left text-sm">
