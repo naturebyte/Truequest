@@ -7,6 +7,7 @@ type WebinarConfirmationPageProps = {
     time?: string;
     location?: string;
     bannerImage?: string;
+    slug?: string;
   }>;
 };
 
@@ -20,6 +21,7 @@ export default async function WebinarConfirmationPage({ searchParams }: WebinarC
       webinarTime={params.time || ""}
       webinarLocation={params.location || "Sultan Bathery, Wayanad"}
       webinarBannerImage={params.bannerImage ? decodeURIComponent(params.bannerImage) : ""}
+      webinarSlug={(params.slug || "").trim().toLowerCase()}
     />
   );
 }

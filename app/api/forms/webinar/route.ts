@@ -263,6 +263,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         status: "registered",
+        webinarSlug: webinar.slug,
         webinarTitle: webinar.title,
         webinarDate: webinar.event_date,
         webinarTime: webinar.event_time,

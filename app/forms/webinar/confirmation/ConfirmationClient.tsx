@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useCallback, useState } from "react";
 
 type WebinarConfirmationClientProps = {
   webinarTitle: string;
@@ -8,6 +9,7 @@ type WebinarConfirmationClientProps = {
   webinarTime: string;
   webinarLocation: string;
   webinarBannerImage: string;
+  webinarSlug: string;
 };
 
 function formatWebinarDate(value: string): string {
@@ -38,15 +40,73 @@ function formatWebinarTime(value: string): string {
   });
 }
 
+function buildRegistrationPageUrl(origin: string, slug: string): string {
+  const encoded = encodeURIComponent(slug);
+  return `${origin}/forms/webinar/${encoded}`;
+}
+
 export default function WebinarConfirmationClient({
   webinarTitle,
   webinarDate,
   webinarTime,
   webinarLocation,
   webinarBannerImage,
+  webinarSlug,
 }: WebinarConfirmationClientProps) {
+  const [shareHint, setShareHint] = useState<"idle" | "copied" | "error">("idle");
+
+  const registrationUrl = useCallback(() => {
+    if (typeof window === "undefined" || !webinarSlug) {
+      return "";
+    }
+    return buildRegistrationPageUrl(window.location.origin, webinarSlug);
+  }, [webinarSlug]);
+
+  const copyRegistrationLink = useCallback(async () => {
+    const url = registrationUrl();
+    if (!url) {
+      setShareHint("error");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareHint("copied");
+      window.setTimeout(() => setShareHint("idle"), 2500);
+    } catch {
+      setShareHint("error");
+    }
+  }, [registrationUrl]);
+
+  const handleShare = useCallback(async () => {
+    const url = registrationUrl();
+    if (!url) {
+      return;
+    }
+    const shareText = webinarTitle.trim()
+      ? `Register for this TrueQuest webinar: ${webinarTitle}`
+      : "Register for this TrueQuest webinar";
+
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({
+          title: webinarTitle.trim() || "TrueQuest webinar",
+          text: shareText,
+          url,
+        });
+        return;
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          return;
+        }
+      }
+    }
+
+    await copyRegistrationLink();
+  }, [copyRegistrationLink, registrationUrl, webinarTitle]);
+
   const heroSrc = webinarBannerImage?.trim() || "/banner.png";
   const heroAlt = webinarTitle.trim() ? webinarTitle : "TrueQuest Learning";
+  const canShare = Boolean(webinarSlug);
 
   return (
     <main className="min-h-screen bg-linear-to-br from-[#221bff] via-[#2b24ff] to-[#3f37ff] py-10 text-white sm:py-16">
@@ -89,6 +149,36 @@ export default function WebinarConfirmationClient({
           <p className="mt-6 text-white/90">
             If you know someone who needs career clarity, invite them to join along with you!
           </p>
+
+          {canShare && (
+            <div className="mt-6 flex flex-col items-center gap-3">
+              <button
+                type="button"
+                onClick={() => void handleShare()}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/35 bg-white/15 px-6 py-3 text-sm font-semibold text-white shadow-sm backdrop-blur-sm transition hover:bg-white/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-lime-300"
+              >
+                <span aria-hidden>↗</span>
+                Share webinar link
+              </button>
+              <button
+                type="button"
+                onClick={() => void copyRegistrationLink()}
+                className="text-sm text-white/75 underline underline-offset-2 hover:text-white"
+              >
+                Copy link instead
+              </button>
+              {shareHint === "copied" && (
+                <p className="text-sm text-lime-300" role="status">
+                  Link copied to clipboard
+                </p>
+              )}
+              {shareHint === "error" && (
+                <p className="text-sm text-red-200" role="alert">
+                  Could not copy the link. Please copy it from your browser&apos;s address bar after opening the webinar page.
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </main>

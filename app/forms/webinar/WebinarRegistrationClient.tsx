@@ -100,7 +100,7 @@ export default function WebinarRegistrationClient({
       }
 
       router.push(
-        `/forms/webinar/confirmation?title=${encodeURIComponent(data.webinarTitle || "")}&date=${encodeURIComponent(data.webinarDate || "")}&time=${encodeURIComponent(data.webinarTime || "")}&location=${encodeURIComponent(data.webinarLocation || "")}&bannerImage=${encodeURIComponent(data.webinarBannerImage || "")}`,
+        `/forms/webinar/confirmation?title=${encodeURIComponent(data.webinarTitle || "")}&date=${encodeURIComponent(data.webinarDate || "")}&time=${encodeURIComponent(data.webinarTime || "")}&location=${encodeURIComponent(data.webinarLocation || "")}&bannerImage=${encodeURIComponent(data.webinarBannerImage || "")}&slug=${encodeURIComponent(data.webinarSlug || "")}`,
       );
     } catch (error: unknown) {
       setErrorMessage(getErrorMessage(error, "Something went wrong."));
