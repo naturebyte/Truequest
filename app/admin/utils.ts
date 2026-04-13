@@ -26,6 +26,20 @@ export function formatCurrency(value: number): string {
   return `Rs ${value.toLocaleString("en-IN")}`;
 }
 
+export function formatLearningMode(value: string | null | undefined): string {
+  const normalized = value?.trim().toLowerCase();
+
+  if (normalized === "online") {
+    return "Online";
+  }
+
+  if (normalized === "offline") {
+    return "Offline";
+  }
+
+  return value?.trim() || "-";
+}
+
 export function getAgeFromDateOfBirth(value: string): string {
   const dateOfBirth = new Date(value);
   if (Number.isNaN(dateOfBirth.getTime())) {

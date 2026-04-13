@@ -69,7 +69,7 @@ export default function UpcomingWebinarsHomeSection({
           id="upcoming-webinars-heading"
           className="text-xl font-bold text-white sm:text-2xl"
         >
-          Upcoming free offline webinar
+          Upcoming Events
         </h2>
         <p className="mt-2 text-sm text-white/80 sm:text-base">
           Reserve your seat — register online in a minute.
@@ -124,7 +124,7 @@ export default function UpcomingWebinarsHomeSection({
             href="/forms/webinar/select"
             className="font-medium underline underline-offset-2 hover:text-lime-300"
           >
-            See all webinars
+            See all workshops &rarr;
           </Link>
         </p>
       )}

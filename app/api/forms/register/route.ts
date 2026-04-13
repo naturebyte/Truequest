@@ -4,6 +4,7 @@ import nodemailer from "nodemailer";
 import { createDecipheriv, scryptSync } from "crypto";
 
 type CourseSelection = "DM" | "HR" | null;
+type AttendanceMode = "online" | "offline" | null;
 type ReviewStatus = "approved" | "under_review";
 const REGISTRATION_NUMBER_BASE = 786;
 
@@ -21,16 +22,36 @@ function parseCourse(value: unknown): CourseSelection {
   return null;
 }
 
-function getRegistrationNumber(course: CourseSelection, sequenceNumber: number): string {
+function parseAttendanceMode(value: unknown): AttendanceMode {
+  const mode = normalizeString(value).toLowerCase();
+
+  if (mode === "online" || mode === "offline") {
+    return mode;
+  }
+
+  return null;
+}
+
+function getRegistrationNumber(
+  course: CourseSelection,
+  attendanceMode: AttendanceMode,
+  sequenceNumber: number,
+): string {
+  const prefixBase = attendanceMode === "offline" ? "TQLO" : "TQL";
+
   if (course === "DM") {
-    return `TQLDM${sequenceNumber}`;
+    return `${prefixBase}DM${sequenceNumber}`;
   }
 
   if (course === "HR") {
-    return `TQLHR${sequenceNumber}`;
+    return `${prefixBase}HR${sequenceNumber}`;
   }
 
-  return `TQLGEN${sequenceNumber}`;
+  return `${prefixBase}GEN${sequenceNumber}`;
+}
+
+function getTotalFee(attendanceMode: AttendanceMode): number {
+  return attendanceMode === "offline" ? 30000 : 25000;
 }
 
 function isEncryptedSmtpPassword(value: string): boolean {
@@ -78,10 +99,10 @@ function buildRegistrationCongratsHtml({
     courseSelected === "HR" ? "Human Resource (HR)" : courseSelected === "DM" ? "Digital Marketing" : "General";
   const nextBatchLabel = nextBatchStartDate
     ? new Date(nextBatchStartDate).toLocaleDateString("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    })
     : "To be announced";
 
   return `<!doctype html>
@@ -198,10 +219,10 @@ function buildRegistrationUnderReviewHtml({
 }): string {
   const nextBatchLabel = nextBatchStartDate
     ? new Date(nextBatchStartDate).toLocaleDateString("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    })
     : "To be announced";
 
   return `<!doctype html>
@@ -495,6 +516,16 @@ async function ensureTables() {
 
   await sql`
     ALTER TABLE student_registrations
+    ADD COLUMN IF NOT EXISTS fee_plan text NOT NULL DEFAULT 'monthly_3x'
+  `;
+
+  await sql`
+    ALTER TABLE student_registrations
+    ADD COLUMN IF NOT EXISTS total_fee integer NOT NULL DEFAULT 30000
+  `;
+
+  await sql`
+    ALTER TABLE student_registrations
     ALTER COLUMN reg_no DROP NOT NULL
   `;
 
@@ -630,13 +661,13 @@ export async function POST(req: NextRequest) {
     const whatsappNumber = normalizeString(body.whatsappNumber);
     const emailId = normalizeString(body.emailId).toLowerCase();
     const courseSelected = parseCourse(body.courseSelected);
-    const qualification = normalizeString(body.qualification);
+    const attendanceMode = parseAttendanceMode(body.qualification);
     const currentStatus = normalizeString(body.currentStatus);
     const lastInstitutionAttended = normalizeString(body.lastInstitutionAttended);
     const place = normalizeString(body.place);
     const dateOfBirth = normalizeString(body.dateOfBirth);
 
-    if (!name || !whatsappNumber || !emailId || !qualification || !place || !dateOfBirth) {
+    if (!name || !whatsappNumber || !emailId || !attendanceMode || !place || !dateOfBirth) {
       return NextResponse.json(
         { error: "Please fill all required fields." },
         { status: 400 },
@@ -679,10 +710,11 @@ export async function POST(req: NextRequest) {
     const isAllowlisted = Boolean(allowlistRow[0]);
     let regNo: string | null = null;
     const reviewStatus: ReviewStatus = isAllowlisted ? "approved" : "under_review";
+    const totalFee = getTotalFee(attendanceMode);
 
     if (isAllowlisted) {
       const nextSequence = await getNextRegistrationSequence();
-      regNo = getRegistrationNumber(courseSelected, nextSequence);
+      regNo = getRegistrationNumber(courseSelected, attendanceMode, nextSequence);
     }
 
     await sql`
@@ -697,6 +729,7 @@ export async function POST(req: NextRequest) {
         last_institution_attended,
         place,
         date_of_birth,
+        total_fee,
         review_status,
         updated_at
       ) VALUES (
@@ -705,11 +738,12 @@ export async function POST(req: NextRequest) {
         ${whatsappNumber},
         ${emailId},
         ${courseSelected},
-        ${qualification},
+        ${attendanceMode},
         ${currentStatus || null},
         ${lastInstitutionAttended || null},
         ${place},
         ${dateOfBirth},
+        ${totalFee},
         ${reviewStatus},
         now()
       )
@@ -723,6 +757,7 @@ export async function POST(req: NextRequest) {
         last_institution_attended = EXCLUDED.last_institution_attended,
         place = EXCLUDED.place,
         date_of_birth = EXCLUDED.date_of_birth,
+        total_fee = EXCLUDED.total_fee,
         review_status = EXCLUDED.review_status,
         reg_no = EXCLUDED.reg_no,
         updated_at = now()

@@ -10,7 +10,7 @@ type FormState = {
   whatsappNumber: string;
   emailId: string;
   courseSelected: "" | "DM" | "HR";
-  qualification: string;
+  qualification: "" | "online" | "offline";
   currentStatus: string;
   lastInstitutionAttended: string;
   place: string;
@@ -264,16 +264,26 @@ export default function StudentRegistrationPage() {
           </label>
 
           <label className="block">
-            <span className="mb-1 block text-sm text-white/90">5. Qualification *</span>
-            <input
+            <span className="mb-1 block text-sm text-white/90">5. Learning Mode *</span>
+            <select
               required
               disabled={isAlreadyRegistered}
               value={formData.qualification}
               onChange={(event) =>
-                setFormData({ ...formData, qualification: event.target.value })
+                setFormData({
+                  ...formData,
+                  qualification: event.target.value as FormState["qualification"],
+                })
               }
               className="w-full rounded-xl bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-lime-400/80"
-            />
+            >
+              <option value="">Select learning mode</option>
+              <option value="online">Online - Rs 25,000</option>
+              <option value="offline">Offline - Rs 30,000</option>
+            </select>
+            <p className="mt-1 text-xs text-white/70">
+              Offline registrations get a Rs 30,000 total fee. Online registrations get a Rs 25,000 total fee.
+            </p>
           </label>
 
           <label className="block">

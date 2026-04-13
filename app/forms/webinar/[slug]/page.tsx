@@ -23,11 +23,11 @@ export async function generateMetadata({ params }: WebinarBySlugPageProps): Prom
   const canonical = absoluteWebinarRegistrationUrl(normalizedSlug, base);
 
   const description = row?.title
-    ? `Register for this TrueQuest webinar: ${row.title}. Free offline webinar with expert career guidance and scholarship opportunities.`
-    : "Register for a TrueQuest Learning webinar.";
+    ? `Register for this TrueQuest offline workshop: ${row.title}. Free offline workshop with expert career guidance and scholarship opportunities.`
+    : "Register for a TrueQuest Learning offline workshop.";
 
-  const pageTitle = row?.title ? `${row.title} | TrueQuest Learning` : "Webinar registration | TrueQuest Learning";
-  const ogHeading = row?.title ? `Register — ${row.title}` : "TrueQuest webinar registration";
+  const pageTitle = row?.title ? `${row.title} | TrueQuest Learning` : "Offline workshop registration | TrueQuest Learning";
+  const ogHeading = row?.title ? `Register — ${row.title}` : "TrueQuest offline workshop registration";
 
   const fallbackImage = absoluteUrlForPublicPath("/banner.jpg", base) ?? `${base}/banner.jpg`;
   const bannerImage =
@@ -49,7 +49,7 @@ export async function generateMetadata({ params }: WebinarBySlugPageProps): Prom
       images: [
         {
           url: ogImage,
-          alt: row?.title ? `${row.title} — TrueQuest Learning` : "TrueQuest Learning webinar",
+          alt: row?.title ? `${row.title} — TrueQuest Learning` : "TrueQuest Learning offline workshop",
         },
       ],
     },
@@ -68,14 +68,14 @@ export default async function WebinarBySlugPage({ params }: WebinarBySlugPagePro
   const row = await getActiveWebinarBySlug(decoded);
   const initialWebinar = row
     ? {
-        id: row.id,
-        slug: row.slug,
-        title: row.title,
-        event_date: String(row.event_date),
-        event_time: String(row.event_time),
-        location: row.location,
-        banner_image_path: row.banner_image_path,
-      }
+      id: row.id,
+      slug: row.slug,
+      title: row.title,
+      event_date: String(row.event_date),
+      event_time: String(row.event_time),
+      location: row.location,
+      banner_image_path: row.banner_image_path,
+    }
     : null;
 
   return (

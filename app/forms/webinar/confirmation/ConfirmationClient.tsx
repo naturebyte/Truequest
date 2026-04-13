@@ -100,7 +100,7 @@ export default function WebinarConfirmationClient({
     if (typeof navigator !== "undefined" && navigator.share) {
       try {
         await navigator.share({
-          title: webinarTitle.trim() || "TrueQuest webinar",
+          title: webinarTitle.trim() || "TrueQuest offline workshop",
           text,
         });
         return;
@@ -134,7 +134,7 @@ export default function WebinarConfirmationClient({
 
         <div className="mt-8 rounded-2xl border border-white/20 bg-white/10 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur-md sm:p-8">
           <h1 className="text-3xl font-bold sm:text-4xl">Registration Successful ✅</h1>
-          <p className="mt-4 text-white/90">You&apos;re all set for the FREE Offline Webinar.</p>
+          <p className="mt-4 text-white/90">You&apos;re all set for the FREE Offline Workshop.</p>
           <p className="mt-2 text-white/85">
             This session will help you explore the right career path with expert guidance.
           </p>
@@ -145,7 +145,7 @@ export default function WebinarConfirmationClient({
           {(webinarTitle || webinarDate || webinarTime || webinarLocation) && (
             <div className="mx-auto mt-6 max-w-xl rounded-xl border border-white/30 bg-white/10 p-4 text-left text-sm">
               <p>
-                <strong>Webinar:</strong> {webinarTitle || "-"}
+                <strong>Workshop:</strong> {webinarTitle || "-"}
               </p>
               <p>
                 <strong>Date:</strong> {webinarDate ? formatWebinarDate(webinarDate) : "-"}
@@ -171,7 +171,7 @@ export default function WebinarConfirmationClient({
                 className="inline-flex w-full max-w-xs items-center justify-center gap-2 rounded-xl bg-lime-400 px-6 py-3 text-sm font-semibold text-black shadow-sm transition hover:bg-lime-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:w-auto sm:max-w-none"
               >
                 <span aria-hidden>↗</span>
-                Share webinar link
+                Share workshop link
               </button>
               <button
                 type="button"

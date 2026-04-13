@@ -98,17 +98,17 @@ function buildWebinarConfirmationHtml(studentName: string, webinar: WebinarRow):
                 ${bannerBlock}
                 <p style="margin:0 0 12px 0;font-size:14px;line-height:1.7;">Hi ${studentName},</p>
                 <p style="margin:0 0 12px 0;font-size:14px;line-height:1.7;">
-                  We’re excited to have you join our FREE Offline Webinar on
+                  We’re excited to have you join our FREE Offline Workshop on
                   <strong> ${new Date(webinar.event_date).toLocaleDateString("en-IN", {
-                    day: "2-digit",
-                    month: "long",
-                    year: "numeric",
-                  })}</strong> at
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  })}</strong> at
                   <strong> ${webinar.event_time.slice(0, 5)}</strong> in
                   <strong> ${webinar.location}</strong>.
                 </p>
                 <p style="margin:0 0 12px 0;font-size:14px;line-height:1.7;">
-                  <strong>Webinar:</strong> ${webinar.title}
+                  <strong>Workshop:</strong> ${webinar.title}
                 </p>
                 <p style="margin:0 0 12px 0;font-size:13px;line-height:1.8;color:#334155;">
                   Get ready for expert career guidance and a chance to win scholarships up to ₹1,00,000 💰
@@ -184,7 +184,7 @@ async function sendWebinarConfirmationEmail(params: {
     "Registration Confirmed",
     "",
     "You’ve chosen the right step towards your future.",
-    `Webinar: ${params.webinar.title}`,
+    `Workshop: ${params.webinar.title}`,
     `Date: ${params.webinar.event_date}`,
     `Time: ${params.webinar.event_time.slice(0, 5)}`,
     `Location: ${params.webinar.location}`,
@@ -198,7 +198,7 @@ async function sendWebinarConfirmationEmail(params: {
   await transporter.sendMail({
     from: fromAddress,
     to: params.emailId,
-    subject: "TrueQuest Learning | Webinar Registration Confirmation",
+    subject: "TrueQuest Learning | Offline Workshop Registration Confirmation",
     text: textLines.join("\n"),
     html: buildWebinarConfirmationHtml(params.studentName, params.webinar),
   });
