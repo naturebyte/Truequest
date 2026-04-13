@@ -337,7 +337,7 @@ function getRegistrationNumber(
   attendanceMode: AttendanceMode,
   sequenceNumber: number,
 ): string {
-  const prefixBase = attendanceMode === "offline" ? "TQLO" : "TQL";
+  const prefixBase = attendanceMode === "online" ? "TQLO" : "TQL";
 
   if (course === "DM") {
     return `${prefixBase}DM${sequenceNumber}`;
@@ -417,6 +417,42 @@ async function ensureTables() {
   await sql`
     ALTER TABLE student_registrations
     ADD COLUMN IF NOT EXISTS total_fee integer NOT NULL DEFAULT 30000
+  `;
+
+  await sql`
+    ALTER TABLE student_registrations
+    ADD COLUMN IF NOT EXISTS learning_mode text
+  `;
+
+  await sql`
+    ALTER TABLE student_registrations
+    ADD COLUMN IF NOT EXISTS academic_qualification text
+  `;
+
+  await sql`
+    UPDATE student_registrations
+    SET academic_qualification = qualification
+    WHERE academic_qualification IS NULL
+      AND lower(qualification) NOT IN ('online', 'offline')
+  `;
+
+  await sql`
+    UPDATE student_registrations
+    SET learning_mode = qualification
+    WHERE learning_mode IS NULL
+      AND lower(qualification) IN ('online', 'offline')
+  `;
+
+  await sql`
+    UPDATE student_registrations
+    SET learning_mode = CASE
+      WHEN lower(qualification) IN ('online', 'offline') THEN lower(qualification)
+      WHEN reg_no LIKE 'TQLO%' THEN 'online'
+      WHEN reg_no LIKE 'TQL%' THEN 'offline'
+      ELSE NULL
+    END
+    WHERE learning_mode IS NULL
+       OR lower(learning_mode) NOT IN ('online', 'offline')
   `;
 
   await sql`
@@ -577,7 +613,8 @@ export async function GET(req: NextRequest) {
         whatsapp_number,
         email_id,
         course_selected,
-        qualification,
+        COALESCE(academic_qualification, qualification) AS qualification,
+        learning_mode,
         current_status,
         last_institution_attended,
         place,
@@ -603,6 +640,7 @@ export async function GET(req: NextRequest) {
       email_id: string;
       course_selected: string | null;
       qualification: string;
+      learning_mode: string | null;
       current_status: string | null;
       last_institution_attended: string | null;
       place: string;
@@ -1010,7 +1048,8 @@ export async function PATCH(req: NextRequest) {
       const name = normalizeString(body.name);
       const emailId = normalizeString(body.emailId).toLowerCase();
       const courseSelected = parseCourse(body.courseSelected);
-      const attendanceMode = parseAttendanceMode(body.qualification);
+      const qualification = normalizeString(body.qualification);
+      const attendanceMode = parseAttendanceMode(body.learningMode);
       const currentStatus = normalizeString(body.currentStatus);
       const lastInstitutionAttended = normalizeString(body.lastInstitutionAttended);
       const place = normalizeString(body.place);
@@ -1018,7 +1057,7 @@ export async function PATCH(req: NextRequest) {
       const feePlan = parseFeePlan(body.feePlan);
       const totalFee = getTotalFee(attendanceMode);
 
-      if (!id || !name || !emailId || !attendanceMode || !place || !dateOfBirth) {
+      if (!id || !name || !emailId || !qualification || !attendanceMode || !place || !dateOfBirth) {
         return NextResponse.json({ error: "Please fill all required fields." }, { status: 400 });
       }
 
@@ -1028,7 +1067,9 @@ export async function PATCH(req: NextRequest) {
           name = ${name},
           email_id = ${emailId},
           course_selected = ${courseSelected},
-          qualification = ${attendanceMode},
+          qualification = ${qualification},
+          academic_qualification = ${qualification},
+          learning_mode = ${attendanceMode},
           current_status = ${currentStatus || null},
           last_institution_attended = ${lastInstitutionAttended || null},
           place = ${place},
@@ -1049,13 +1090,14 @@ export async function PATCH(req: NextRequest) {
       }
 
       const targetRow = (await sql`
-        SELECT course_selected, qualification, reg_no, name, whatsapp_number, email_id
+        SELECT course_selected, qualification, learning_mode, reg_no, name, whatsapp_number, email_id
         FROM student_registrations
         WHERE id = ${id}
         LIMIT 1
       `) as Array<{
         course_selected: string | null;
         qualification: string;
+        learning_mode: string | null;
         reg_no: string | null;
         name: string;
         whatsapp_number: string;
@@ -1166,7 +1208,7 @@ export async function PATCH(req: NextRequest) {
       }
 
       const courseSelected = parseCourse(targetRow[0].course_selected);
-      const attendanceMode = parseAttendanceMode(targetRow[0].qualification);
+      const attendanceMode = parseAttendanceMode(targetRow[0].learning_mode);
       const nextSequence = await getNextRegistrationSequence();
       const regNo = getRegistrationNumber(courseSelected, attendanceMode, nextSequence);
 

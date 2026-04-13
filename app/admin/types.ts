@@ -14,6 +14,7 @@ export type RegistrationRecord = {
   email_id: string;
   course_selected: string | null;
   qualification: string;
+  learning_mode: string | null;
   current_status: string | null;
   last_institution_attended: string | null;
   place: string;

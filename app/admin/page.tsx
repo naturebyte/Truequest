@@ -64,22 +64,53 @@ function PaginationControls({
   );
 }
 
-function formatLearningMode(value: string | null | undefined): string {
+function parseLearningMode(value: string | null | undefined): "online" | "offline" | null {
   const normalized = value?.trim().toLowerCase();
 
   if (normalized === "online") {
-    return "Online";
+    return "online";
   }
 
   if (normalized === "offline") {
+    return "offline";
+  }
+
+  return null;
+}
+
+function getRegistrationLearningMode(
+  registration: Pick<RegistrationRecord, "learning_mode" | "reg_no">,
+): "online" | "offline" | null {
+  const direct = parseLearningMode(registration.learning_mode);
+  if (direct) {
+    return direct;
+  }
+
+  const regNo = registration.reg_no?.trim().toUpperCase();
+  if (regNo?.startsWith("TQLO")) {
+    return "online";
+  }
+  if (regNo?.startsWith("TQL")) {
+    return "offline";
+  }
+
+  return null;
+}
+
+function formatLearningMode(value: "online" | "offline" | null): string {
+  if (value === "online") {
+    return "Online";
+  }
+
+  if (value === "offline") {
     return "Offline";
   }
 
-  return value?.trim() || "-";
+  return "-";
 }
 
 function formatFeeModeSummary(registration: RegistrationRecord): string {
-  return `${formatLearningMode(registration.qualification)} (${formatCurrency(
+  return `${formatLearningMode(getRegistrationLearningMode(registration))} (${formatCurrency(
     registration.total_fee || 0,
   )})`;
 }
@@ -635,6 +666,7 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
           emailId: editingRegData.email_id,
           courseSelected: editingRegData.course_selected,
           qualification: editingRegData.qualification,
+          learningMode: editingRegData.learning_mode,
           currentStatus: editingRegData.current_status,
           lastInstitutionAttended: editingRegData.last_institution_attended,
           place: editingRegData.place,
@@ -1616,8 +1648,8 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                             <td className="px-3 py-2">
                               <span
                                 className={`rounded-full px-2.5 py-1 text-xs font-medium ${webinar.is_active
-                                    ? "bg-emerald-100 text-emerald-700"
-                                    : "bg-slate-200 text-slate-700"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : "bg-slate-200 text-slate-700"
                                   }`}
                               >
                                 {webinar.is_active ? "Active" : "Inactive"}
@@ -2127,6 +2159,7 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                           <th className="px-3 py-2">WhatsApp</th>
                           <th className="px-3 py-2">Email</th>
                           <th className="px-3 py-2">Course</th>
+                          <th className="px-3 py-2">Qualification</th>
                           <th className="px-3 py-2">Mode</th>
                           <th className="px-3 py-2">Status</th>
                           <th className="px-3 py-2">Institution</th>
@@ -2160,7 +2193,10 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                             <td className="px-3 py-2">{row.whatsapp_number}</td>
                             <td className="px-3 py-2">{row.email_id}</td>
                             <td className="px-3 py-2">{row.course_selected || "-"}</td>
-                            <td className="px-3 py-2">{formatLearningMode(row.qualification)}</td>
+                            <td className="px-3 py-2">{row.qualification || "-"}</td>
+                            <td className="px-3 py-2">
+                              {formatLearningMode(getRegistrationLearningMode(row))}
+                            </td>
                             <td className="px-3 py-2">{row.current_status || "-"}</td>
                             <td className="px-3 py-2">{row.last_institution_attended || "-"}</td>
                             <td className="px-3 py-2">{row.place}</td>
@@ -2326,11 +2362,11 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                       <option value="HR">HR</option>
                     </select>
                     <select
-                      value={editingRegData.qualification || ""}
+                      value={editingRegData.learning_mode || ""}
                       onChange={(event) =>
                         setEditingRegData((prev) => ({
                           ...prev,
-                          qualification: event.target.value,
+                          learning_mode: event.target.value,
                         }))
                       }
                       className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
@@ -2339,6 +2375,17 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                       <option value="online">Online</option>
                       <option value="offline">Offline</option>
                     </select>
+                    <input
+                      placeholder="Qualification"
+                      value={editingRegData.qualification || ""}
+                      onChange={(event) =>
+                        setEditingRegData((prev) => ({
+                          ...prev,
+                          qualification: event.target.value,
+                        }))
+                      }
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                    />
                     <input
                       placeholder="Current status"
                       value={editingRegData.current_status || ""}
@@ -2423,9 +2470,13 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                       <p className="mt-1 font-medium">{selectedRegistrationDetails.course_selected || "-"}</p>
                     </div>
                     <div className="rounded-xl border border-slate-200 p-3">
+                      <p className="text-xs uppercase text-slate-500">Qualification</p>
+                      <p className="mt-1 font-medium">{selectedRegistrationDetails.qualification || "-"}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 p-3">
                       <p className="text-xs uppercase text-slate-500">Mode</p>
                       <p className="mt-1 font-medium">
-                        {formatLearningMode(selectedRegistrationDetails.qualification)}
+                        {formatLearningMode(getRegistrationLearningMode(selectedRegistrationDetails))}
                       </p>
                     </div>
                     <div className="rounded-xl border border-slate-200 p-3">

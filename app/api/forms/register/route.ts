@@ -37,7 +37,7 @@ function getRegistrationNumber(
   attendanceMode: AttendanceMode,
   sequenceNumber: number,
 ): string {
-  const prefixBase = attendanceMode === "offline" ? "TQLO" : "TQL";
+  const prefixBase = attendanceMode === "online" ? "TQLO" : "TQL";
 
   if (course === "DM") {
     return `${prefixBase}DM${sequenceNumber}`;
@@ -526,6 +526,42 @@ async function ensureTables() {
 
   await sql`
     ALTER TABLE student_registrations
+    ADD COLUMN IF NOT EXISTS learning_mode text
+  `;
+
+  await sql`
+    ALTER TABLE student_registrations
+    ADD COLUMN IF NOT EXISTS academic_qualification text
+  `;
+
+  await sql`
+    UPDATE student_registrations
+    SET academic_qualification = qualification
+    WHERE academic_qualification IS NULL
+      AND lower(qualification) NOT IN ('online', 'offline')
+  `;
+
+  await sql`
+    UPDATE student_registrations
+    SET learning_mode = qualification
+    WHERE learning_mode IS NULL
+      AND lower(qualification) IN ('online', 'offline')
+  `;
+
+  await sql`
+    UPDATE student_registrations
+    SET learning_mode = CASE
+      WHEN lower(qualification) IN ('online', 'offline') THEN lower(qualification)
+      WHEN reg_no LIKE 'TQLO%' THEN 'online'
+      WHEN reg_no LIKE 'TQL%' THEN 'offline'
+      ELSE NULL
+    END
+    WHERE learning_mode IS NULL
+       OR lower(learning_mode) NOT IN ('online', 'offline')
+  `;
+
+  await sql`
+    ALTER TABLE student_registrations
     ALTER COLUMN reg_no DROP NOT NULL
   `;
 
@@ -581,7 +617,8 @@ export async function GET(req: NextRequest) {
         whatsapp_number,
         email_id,
         course_selected,
-        qualification,
+        COALESCE(academic_qualification, qualification) AS qualification,
+        learning_mode,
         current_status,
         last_institution_attended,
         place,
@@ -598,6 +635,7 @@ export async function GET(req: NextRequest) {
       email_id: string;
       course_selected: string | null;
       qualification: string;
+      learning_mode: string | null;
       current_status: string | null;
       last_institution_attended: string | null;
       place: string;
@@ -661,13 +699,14 @@ export async function POST(req: NextRequest) {
     const whatsappNumber = normalizeString(body.whatsappNumber);
     const emailId = normalizeString(body.emailId).toLowerCase();
     const courseSelected = parseCourse(body.courseSelected);
-    const attendanceMode = parseAttendanceMode(body.qualification);
+    const qualification = normalizeString(body.qualification);
+    const attendanceMode = parseAttendanceMode(body.learningMode);
     const currentStatus = normalizeString(body.currentStatus);
     const lastInstitutionAttended = normalizeString(body.lastInstitutionAttended);
     const place = normalizeString(body.place);
     const dateOfBirth = normalizeString(body.dateOfBirth);
 
-    if (!name || !whatsappNumber || !emailId || !attendanceMode || !place || !dateOfBirth) {
+    if (!name || !whatsappNumber || !emailId || !qualification || !attendanceMode || !place || !dateOfBirth) {
       return NextResponse.json(
         { error: "Please fill all required fields." },
         { status: 400 },
@@ -725,6 +764,8 @@ export async function POST(req: NextRequest) {
         email_id,
         course_selected,
         qualification,
+        academic_qualification,
+        learning_mode,
         current_status,
         last_institution_attended,
         place,
@@ -738,6 +779,8 @@ export async function POST(req: NextRequest) {
         ${whatsappNumber},
         ${emailId},
         ${courseSelected},
+        ${qualification},
+        ${qualification},
         ${attendanceMode},
         ${currentStatus || null},
         ${lastInstitutionAttended || null},
@@ -753,6 +796,8 @@ export async function POST(req: NextRequest) {
         email_id = EXCLUDED.email_id,
         course_selected = EXCLUDED.course_selected,
         qualification = EXCLUDED.qualification,
+        academic_qualification = EXCLUDED.academic_qualification,
+        learning_mode = EXCLUDED.learning_mode,
         current_status = EXCLUDED.current_status,
         last_institution_attended = EXCLUDED.last_institution_attended,
         place = EXCLUDED.place,

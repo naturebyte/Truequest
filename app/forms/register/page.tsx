@@ -10,7 +10,8 @@ type FormState = {
   whatsappNumber: string;
   emailId: string;
   courseSelected: "" | "DM" | "HR";
-  qualification: "" | "online" | "offline";
+  qualification: string;
+  learningMode: "" | "online" | "offline";
   currentStatus: string;
   lastInstitutionAttended: string;
   place: string;
@@ -23,6 +24,7 @@ const defaultFormState: FormState = {
   emailId: "",
   courseSelected: "",
   qualification: "",
+  learningMode: "",
   currentStatus: "",
   lastInstitutionAttended: "",
   place: "",
@@ -264,31 +266,44 @@ export default function StudentRegistrationPage() {
           </label>
 
           <label className="block">
-            <span className="mb-1 block text-sm text-white/90">5. Learning Mode *</span>
-            <select
+            <span className="mb-1 block text-sm text-white/90">5. Qualification *</span>
+            <input
               required
               disabled={isAlreadyRegistered}
               value={formData.qualification}
               onChange={(event) =>
                 setFormData({
                   ...formData,
-                  qualification: event.target.value as FormState["qualification"],
+                  qualification: event.target.value,
+                })
+              }
+              className="w-full rounded-xl bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-lime-400/80"
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-sm text-white/90">6. Learning Mode *</span>
+            <select
+              required
+              disabled={isAlreadyRegistered}
+              value={formData.learningMode}
+              onChange={(event) =>
+                setFormData({
+                  ...formData,
+                  learningMode: event.target.value as FormState["learningMode"],
                 })
               }
               className="w-full rounded-xl bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-lime-400/80"
             >
               <option value="">Select learning mode</option>
-              <option value="online">Online - Rs 25,000</option>
-              <option value="offline">Offline - Rs 30,000</option>
+              <option value="online">Online</option>
+              <option value="offline">Offline</option>
             </select>
-            <p className="mt-1 text-xs text-white/70">
-              Offline registrations get a Rs 30,000 total fee. Online registrations get a Rs 25,000 total fee.
-            </p>
           </label>
 
           <label className="block">
             <span className="mb-1 block text-sm text-white/90">
-              6. Current Status (Student / Working / Other)
+              7. Current Status (Student / Working / Other)
             </span>
             <select
               disabled={isAlreadyRegistered}
@@ -307,7 +322,7 @@ export default function StudentRegistrationPage() {
 
           <label className="block">
             <span className="mb-1 block text-sm text-white/90">
-              7. Last Institution Attended
+              8. Last Institution Attended
             </span>
             <input
               disabled={isAlreadyRegistered}
@@ -323,7 +338,7 @@ export default function StudentRegistrationPage() {
           </label>
 
           <label className="block">
-            <span className="mb-1 block text-sm text-white/90">8. Place *</span>
+            <span className="mb-1 block text-sm text-white/90">9. Place *</span>
             <input
               required
               disabled={isAlreadyRegistered}
@@ -334,7 +349,7 @@ export default function StudentRegistrationPage() {
           </label>
 
           <label className="block">
-            <span className="mb-1 block text-sm text-white/90">9. Date of Birth *</span>
+            <span className="mb-1 block text-sm text-white/90">10. Date of Birth *</span>
             <input
               type="date"
               required
