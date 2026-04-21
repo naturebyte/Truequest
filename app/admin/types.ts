@@ -51,6 +51,7 @@ export type AllowlistRecord = {
 
 export type AdminTab =
   | "overview"
+  | "admin_management"
   | "brochure_requests"
   | "webinar_registrations"
   | "allowlist"
@@ -105,4 +106,34 @@ export type SmtpSettings = {
   user: string;
   source: "custom" | "env" | "unset";
   password_set: boolean;
+};
+
+export type AdminPermission =
+  | "overview:view"
+  | "overview:manage"
+  | "registrations:view"
+  | "registrations:manage"
+  | "webinar_management:view"
+  | "webinar_management:manage"
+  | "allowed_students:view"
+  | "allowed_students:manage"
+  | "brochure_requests:view"
+  | "brochure_requests:manage"
+  | "fees:view"
+  | "fees:manage"
+  | "admin_management:view"
+  | "admin_management:manage";
+
+export type AdminAuthContext = {
+  username: string;
+  isSuperAdmin: boolean;
+  permissions: AdminPermission[];
+};
+
+export type ManagedAdminUser = {
+  id: number;
+  username: string;
+  permissions: AdminPermission[];
+  is_active: boolean;
+  created_at: string;
 };

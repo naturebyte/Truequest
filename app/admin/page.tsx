@@ -1,16 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, Fragment, useEffect, useState } from "react";
 import { ActionIcon } from "./components/ActionIcon";
 import { AdminSidebar } from "./components/AdminSidebar";
 import { LoginForm } from "./components/LoginForm";
 import { ReviewBadge } from "./components/ReviewBadge";
 import type {
+  AdminAuthContext,
+  AdminPermission,
   AdminTab,
   AllowlistRecord,
   BrochureRequestRecord,
   FeeTransaction,
+  ManagedAdminUser,
   NotificationRequestRecord,
   RegistrationRecord,
   SmtpSettings,
@@ -25,6 +28,85 @@ import {
   getErrorMessage,
   toDateInputValue,
 } from "./utils";
+
+const TAB_VIEW_PERMISSION: Record<AdminTab, AdminPermission> = {
+  overview: "overview:view",
+  admin_management: "admin_management:view",
+  registrations: "registrations:view",
+  webinar_registrations: "webinar_management:view",
+  allowlist: "allowed_students:view",
+  brochure_requests: "brochure_requests:view",
+  fees: "fees:view",
+};
+
+const ADMIN_PERMISSION_OPTIONS: AdminPermission[] = [
+  "overview:view",
+  "overview:manage",
+  "registrations:view",
+  "registrations:manage",
+  "webinar_management:view",
+  "webinar_management:manage",
+  "allowed_students:view",
+  "allowed_students:manage",
+  "brochure_requests:view",
+  "brochure_requests:manage",
+  "fees:view",
+  "fees:manage",
+  "admin_management:view",
+  "admin_management:manage",
+];
+
+const ADMIN_PERMISSION_PRESETS: Array<{
+  id: string;
+  label: string;
+  permissions: AdminPermission[];
+}> = [
+  {
+    id: "all_view",
+    label: "All View",
+    permissions: [
+      "overview:view",
+      "registrations:view",
+      "webinar_management:view",
+      "allowed_students:view",
+      "brochure_requests:view",
+      "fees:view",
+      "admin_management:view",
+    ],
+  },
+  {
+    id: "full_control",
+    label: "Full Control",
+    permissions: ADMIN_PERMISSION_OPTIONS,
+  },
+  {
+    id: "operations_manager",
+    label: "Operations Manager",
+    permissions: [
+      "overview:view",
+      "overview:manage",
+      "registrations:view",
+      "registrations:manage",
+      "allowed_students:view",
+      "allowed_students:manage",
+      "fees:view",
+      "fees:manage",
+      "brochure_requests:view",
+      "brochure_requests:manage",
+    ],
+  },
+  {
+    id: "webinar_manager",
+    label: "Webinar Manager",
+    permissions: [
+      "overview:view",
+      "webinar_management:view",
+      "webinar_management:manage",
+      "brochure_requests:view",
+      "brochure_requests:manage",
+    ],
+  },
+];
 
 function PaginationControls({
   page,
@@ -161,6 +243,17 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
   const [paymentHistoryPage, setPaymentHistoryPage] = useState(1);
   const [activeTab, setActiveTab] = useState<AdminTab>(forcedTab ?? "overview");
   const currentTab = activeTab;
+  const [authContext, setAuthContext] = useState<AdminAuthContext | null>(null);
+  const [managedAdmins, setManagedAdmins] = useState<ManagedAdminUser[]>([]);
+  const [newAdminUsername, setNewAdminUsername] = useState("");
+  const [newAdminPassword, setNewAdminPassword] = useState("");
+  const [newAdminPermissions, setNewAdminPermissions] = useState<AdminPermission[]>([]);
+  const [newAdminPreset, setNewAdminPreset] = useState("");
+  const [editingManagedAdminId, setEditingManagedAdminId] = useState<number | null>(null);
+  const [editingManagedPermissions, setEditingManagedPermissions] = useState<AdminPermission[]>([]);
+  const [editingManagedIsActive, setEditingManagedIsActive] = useState(true);
+  const [editingManagedPassword, setEditingManagedPassword] = useState("");
+  const [editingManagedPreset, setEditingManagedPreset] = useState("");
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isFeeModalOpen, setIsFeeModalOpen] = useState(false);
@@ -184,6 +277,7 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
   const [smtpUserInput, setSmtpUserInput] = useState("");
   const [smtpPasswordInput, setSmtpPasswordInput] = useState("");
   const [nextBatchStartDate, setNextBatchStartDate] = useState("");
+  const [nextBatchUpdatedAt, setNextBatchUpdatedAt] = useState("");
   const [nextBatchStartDateInput, setNextBatchStartDateInput] = useState("");
   const [smtpInfoMessage, setSmtpInfoMessage] = useState("");
   const [sendingNotificationEmail, setSendingNotificationEmail] = useState<string | null>(null);
@@ -198,6 +292,27 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
   const [webinarRegistrationSearchTerm, setWebinarRegistrationSearchTerm] = useState("");
   const [isExportingWebinarExcel, setIsExportingWebinarExcel] = useState(false);
   const [copiedWebinarSlug, setCopiedWebinarSlug] = useState<string | null>(null);
+
+  function hasPermission(permission: AdminPermission): boolean {
+    if (!authContext) {
+      return false;
+    }
+    if (authContext.isSuperAdmin) {
+      return true;
+    }
+    return authContext.permissions.includes(permission);
+  }
+
+  const allowedTabs = (Object.keys(TAB_VIEW_PERMISSION) as AdminTab[]).filter((tab) =>
+    hasPermission(TAB_VIEW_PERMISSION[tab]),
+  );
+  const canManageOverview = hasPermission("overview:manage");
+  const canManageFees = hasPermission("fees:manage");
+  const canManageWebinar = hasPermission("webinar_management:manage");
+  const canManageAllowlist = hasPermission("allowed_students:manage");
+  const canManageBrochure = hasPermission("brochure_requests:manage");
+  const canViewAdminManagement = hasPermission("admin_management:view");
+  const canManageAdminManagement = hasPermission("admin_management:manage");
 
   async function fetchRegistrations() {
     try {
@@ -233,7 +348,9 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
       setSmtpUserInput(data.smtpSettings?.user || "");
       setSmtpPasswordInput("");
       setNextBatchStartDate(data.nextBatchStartDate || "");
+      setNextBatchUpdatedAt(data.nextBatchUpdatedAt || "");
       setNextBatchStartDateInput(data.nextBatchStartDate || "");
+      setAuthContext(data.auth || null);
       setIsAuthenticated(true);
     } finally {
       setIsInitializing(false);
@@ -243,6 +360,37 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
   useEffect(() => {
     fetchRegistrations().catch(() => { });
   }, []);
+
+  useEffect(() => {
+    if (!allowedTabs.length) {
+      return;
+    }
+    if (!allowedTabs.includes(currentTab)) {
+      setActiveTab(allowedTabs[0]);
+    }
+  }, [allowedTabs, currentTab]);
+
+  useEffect(() => {
+    if (!authContext) {
+      setManagedAdmins([]);
+      return;
+    }
+    const canViewAdminManagementFromSession =
+      authContext.isSuperAdmin ||
+      authContext.permissions.includes("admin_management:view") ||
+      authContext.permissions.includes("admin_management:manage");
+    if (canViewAdminManagementFromSession) {
+      fetch("/api/admin/admins")
+        .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+        .then(({ ok, data }) => {
+          if (!ok) {
+            throw new Error(data?.error || "Unable to load admin users.");
+          }
+          setManagedAdmins(data.admins || []);
+        })
+        .catch(() => { });
+    }
+  }, [authContext]);
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -272,6 +420,8 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
   async function handleLogout() {
     await fetch("/api/admin/logout", { method: "POST" });
     setIsAuthenticated(false);
+    setAuthContext(null);
+    setManagedAdmins([]);
     setRegistrations([]);
     setUsername("");
     setPassword("");
@@ -286,6 +436,94 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
       setErrorMessage(getErrorMessage(error, "Unable to sync latest data."));
     } finally {
       setIsRefreshing(false);
+    }
+  }
+
+  async function fetchManagedAdmins() {
+    if (!canViewAdminManagement) {
+      return;
+    }
+    const response = await fetch("/api/admin/admins");
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data?.error || "Unable to load admin users.");
+    }
+    setManagedAdmins(data.admins || []);
+  }
+
+  async function handleCreateManagedAdmin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setErrorMessage("");
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/admin/admins", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: newAdminUsername,
+          password: newAdminPassword,
+          permissions: newAdminPermissions,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "Unable to create admin.");
+      }
+      setNewAdminUsername("");
+      setNewAdminPassword("");
+      setNewAdminPermissions([]);
+      setNewAdminPreset("");
+      await fetchManagedAdmins();
+    } catch (error: unknown) {
+      setErrorMessage(getErrorMessage(error, "Unable to create admin."));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function startManagedAdminEdit(admin: ManagedAdminUser) {
+    setEditingManagedAdminId(admin.id);
+    setEditingManagedPermissions(admin.permissions || []);
+    setEditingManagedIsActive(admin.is_active);
+    setEditingManagedPassword("");
+    setEditingManagedPreset("");
+  }
+
+  function cancelManagedAdminEdit() {
+    setEditingManagedAdminId(null);
+    setEditingManagedPermissions([]);
+    setEditingManagedIsActive(true);
+    setEditingManagedPassword("");
+    setEditingManagedPreset("");
+  }
+
+  async function handleUpdateManagedAdmin() {
+    if (!editingManagedAdminId) {
+      return;
+    }
+    setErrorMessage("");
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/admin/admins", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingManagedAdminId,
+          permissions: editingManagedPermissions,
+          isActive: editingManagedIsActive,
+          password: editingManagedPassword,
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || "Unable to update admin.");
+      }
+      cancelManagedAdminEdit();
+      await fetchManagedAdmins();
+    } catch (error: unknown) {
+      setErrorMessage(getErrorMessage(error, "Unable to update admin."));
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -1112,6 +1350,7 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
               onTabChange={setActiveTab}
               onLogout={handleLogout}
               useRouteNavigation={false}
+              allowedTabs={allowedTabs}
             />
 
             <div className="space-y-6">
@@ -1294,8 +1533,16 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                       Configure custom SMTP credentials here. If removed, system will automatically use
                       `.env` values (`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`).
                     </p>
+                    {!canManageOverview && (
+                      <p className="mt-1 text-sm text-amber-700">
+                        You have read-only access to Overview settings.
+                      </p>
+                    )}
                     <p className="mt-1 text-sm text-slate-600">
                       Current next batch start date: {nextBatchStartDate ? formatDate(nextBatchStartDate) : "Not set"}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Last updated: {nextBatchUpdatedAt ? formatDate(nextBatchUpdatedAt) : "Not updated yet"}
                     </p>
 
                     {smtpInfoMessage && (
@@ -1304,79 +1551,83 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                       </p>
                     )}
 
-                    <div className="mt-4 grid gap-3 md:grid-cols-2">
-                      <input
-                        value={smtpHostInput}
-                        onChange={(event) => setSmtpHostInput(event.target.value)}
-                        placeholder="SMTP Host"
-                        className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
-                      />
-                      <input
-                        value={smtpPortInput}
-                        onChange={(event) => setSmtpPortInput(event.target.value)}
-                        placeholder="SMTP Port"
-                        className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
-                      />
-                      <input
-                        value={smtpUserInput}
-                        onChange={(event) => setSmtpUserInput(event.target.value)}
-                        placeholder="SMTP User"
-                        className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
-                      />
-                      <input
-                        type="password"
-                        value={smtpPasswordInput}
-                        onChange={(event) => setSmtpPasswordInput(event.target.value)}
-                        placeholder={
-                          smtpSettings.password_set
-                            ? "SMTP Password (leave empty to keep existing)"
-                            : "SMTP Password"
-                        }
-                        className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
-                      />
-                    </div>
+                    {canManageOverview && (
+                      <>
+                        <div className="mt-4 grid gap-3 md:grid-cols-2">
+                          <input
+                            value={smtpHostInput}
+                            onChange={(event) => setSmtpHostInput(event.target.value)}
+                            placeholder="SMTP Host"
+                            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                          />
+                          <input
+                            value={smtpPortInput}
+                            onChange={(event) => setSmtpPortInput(event.target.value)}
+                            placeholder="SMTP Port"
+                            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                          />
+                          <input
+                            value={smtpUserInput}
+                            onChange={(event) => setSmtpUserInput(event.target.value)}
+                            placeholder="SMTP User"
+                            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                          />
+                          <input
+                            type="password"
+                            value={smtpPasswordInput}
+                            onChange={(event) => setSmtpPasswordInput(event.target.value)}
+                            placeholder={
+                              smtpSettings.password_set
+                                ? "SMTP Password (leave empty to keep existing)"
+                                : "SMTP Password"
+                            }
+                            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                          />
+                        </div>
 
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={handleSmtpSave}
-                        disabled={isSaving}
-                        className="rounded-xl bg-[#2b24ff] px-4 py-2 text-sm font-semibold text-white hover:bg-[#221bff] disabled:opacity-70"
-                      >
-                        Save SMTP
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleSmtpResetToEnv}
-                        disabled={isSaving}
-                        className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-70"
-                      >
-                        Reset to .env
-                      </button>
-                    </div>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={handleSmtpSave}
+                            disabled={isSaving}
+                            className="rounded-xl bg-[#2b24ff] px-4 py-2 text-sm font-semibold text-white hover:bg-[#221bff] disabled:opacity-70"
+                          >
+                            Save SMTP
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSmtpResetToEnv}
+                            disabled={isSaving}
+                            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-70"
+                          >
+                            Reset to .env
+                          </button>
+                        </div>
 
-                    <div className="mt-5 border-t border-slate-200 pt-4">
-                      <h4 className="text-sm font-semibold text-slate-800">Next Batch Start Date</h4>
-                      <p className="mt-1 text-sm text-slate-600">
-                        Used automatically in notification emails when Send/Resend is clicked.
-                      </p>
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <input
-                          type="date"
-                          value={nextBatchStartDateInput}
-                          onChange={(event) => setNextBatchStartDateInput(event.target.value)}
-                          className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
-                        />
-                        <button
-                          type="button"
-                          onClick={handleNextBatchDateSave}
-                          disabled={isSaving}
-                          className="rounded-xl bg-[#2b24ff] px-4 py-2 text-sm font-semibold text-white hover:bg-[#221bff] disabled:opacity-70"
-                        >
-                          Save Date
-                        </button>
-                      </div>
-                    </div>
+                        <div className="mt-5 border-t border-slate-200 pt-4">
+                          <h4 className="text-sm font-semibold text-slate-800">Next Batch Start Date</h4>
+                          <p className="mt-1 text-sm text-slate-600">
+                            Used automatically in notification emails when Send/Resend is clicked.
+                          </p>
+                          <div className="mt-3 flex flex-wrap items-center gap-2">
+                            <input
+                              type="date"
+                              value={nextBatchStartDateInput}
+                              onChange={(event) => setNextBatchStartDateInput(event.target.value)}
+                              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleNextBatchDateSave}
+                              disabled={isSaving}
+                              className="rounded-xl bg-[#2b24ff] px-4 py-2 text-sm font-semibold text-white hover:bg-[#221bff] disabled:opacity-70"
+                            >
+                              Save Date
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
 
                 </section>
@@ -1512,18 +1763,22 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                                 )}
                               </td>
                               <td className="px-3 py-2">
-                                <button
-                                  type="button"
-                                  onClick={() => void handleSendNotificationEmail(user.email)}
-                                  disabled={sendingNotificationEmail === user.email}
-                                  className="inline-flex rounded-lg border border-[#2b24ff]/20 bg-[#2b24ff]/10 px-3 py-1.5 text-xs font-medium text-[#2b24ff] hover:bg-[#2b24ff]/15"
-                                >
-                                  {sendingNotificationEmail === user.email
-                                    ? "Sending..."
-                                    : user.sent_count > 0
-                                      ? "Resend"
-                                      : "Send Email"}
-                                </button>
+                                {canManageBrochure ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleSendNotificationEmail(user.email)}
+                                    disabled={sendingNotificationEmail === user.email}
+                                    className="inline-flex rounded-lg border border-[#2b24ff]/20 bg-[#2b24ff]/10 px-3 py-1.5 text-xs font-medium text-[#2b24ff] hover:bg-[#2b24ff]/15"
+                                  >
+                                    {sendingNotificationEmail === user.email
+                                      ? "Sending..."
+                                      : user.sent_count > 0
+                                        ? "Resend"
+                                        : "Send Email"}
+                                  </button>
+                                ) : (
+                                  <span className="text-slate-400">-</span>
+                                )}
                               </td>
                             </tr>
                           ))}
@@ -1553,6 +1808,208 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                 </section>
               )}
 
+              {currentTab === "admin_management" && canViewAdminManagement && (
+                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
+                  <h2 className="text-2xl font-semibold">Admin Access Management</h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Create admins and assign page-level view/manage permissions.
+                  </p>
+                  {canManageAdminManagement && (
+                    <form onSubmit={handleCreateManagedAdmin} className="mt-3 grid gap-3 md:grid-cols-2">
+                    <div className="md:col-span-2">
+                      <label className="mb-1 block text-sm text-slate-700">Permission Preset</label>
+                      <select
+                        value={newAdminPreset}
+                        onChange={(event) => {
+                          const presetId = event.target.value;
+                          setNewAdminPreset(presetId);
+                          const preset = ADMIN_PERMISSION_PRESETS.find((item) => item.id === presetId);
+                          if (preset) {
+                            setNewAdminPermissions(preset.permissions);
+                          }
+                        }}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                      >
+                        <option value="">Custom (select manually)</option>
+                        {ADMIN_PERMISSION_PRESETS.map((preset) => (
+                          <option key={preset.id} value={preset.id}>
+                            {preset.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <input
+                      required
+                      value={newAdminUsername}
+                      onChange={(event) => setNewAdminUsername(event.target.value)}
+                      placeholder="Admin username"
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                    />
+                    <input
+                      required
+                      type="password"
+                      minLength={6}
+                      value={newAdminPassword}
+                      onChange={(event) => setNewAdminPassword(event.target.value)}
+                      placeholder="Password (min 6)"
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                    />
+                    <div className="md:col-span-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {ADMIN_PERMISSION_OPTIONS.map((permission) => (
+                        <label key={permission} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={newAdminPermissions.includes(permission)}
+                            onChange={(event) =>
+                              setNewAdminPermissions((prev) =>
+                                event.target.checked
+                                  ? [...prev, permission]
+                                  : prev.filter((item) => item !== permission),
+                              )
+                            }
+                          />
+                          <span>{permission}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <div className="md:col-span-2">
+                      <button
+                        type="submit"
+                        disabled={isSaving}
+                        className="rounded-xl bg-[#2b24ff] px-4 py-2 text-sm font-semibold text-white hover:bg-[#221bff] disabled:opacity-70"
+                      >
+                        Create Admin
+                      </button>
+                    </div>
+                    </form>
+                  )}
+                  <div className="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+                    <table className="min-w-full text-left text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50 text-slate-700">
+                          <th className="px-3 py-2">Username</th>
+                          <th className="px-3 py-2">Permissions</th>
+                          <th className="px-3 py-2">Status</th>
+                          {canManageAdminManagement && <th className="px-3 py-2">Actions</th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {managedAdmins.map((admin) => (
+                          <Fragment key={admin.id}>
+                            <tr className="border-b border-slate-100 text-slate-700">
+                              <td className="px-3 py-2">{admin.username}</td>
+                              <td className="px-3 py-2 text-xs">{admin.permissions.join(", ")}</td>
+                              <td className="px-3 py-2">{admin.is_active ? "Active" : "Disabled"}</td>
+                              {canManageAdminManagement && (
+                                <td className="px-3 py-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => startManagedAdminEdit(admin)}
+                                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs hover:bg-slate-50"
+                                  >
+                                    Edit Permissions
+                                  </button>
+                                </td>
+                              )}
+                            </tr>
+                            {canManageAdminManagement && editingManagedAdminId === admin.id && (
+                              <tr className="border-b border-slate-100 bg-slate-50/60">
+                                <td colSpan={4} className="px-3 py-3">
+                                  <div className="grid gap-3 md:grid-cols-2">
+                                    <div className="md:col-span-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                      <div className="sm:col-span-2 lg:col-span-3">
+                                        <label className="mb-1 block text-xs text-slate-700">Permission Preset</label>
+                                        <select
+                                          value={editingManagedPreset}
+                                          onChange={(event) => {
+                                            const presetId = event.target.value;
+                                            setEditingManagedPreset(presetId);
+                                            const preset = ADMIN_PERMISSION_PRESETS.find((item) => item.id === presetId);
+                                            if (preset) {
+                                              setEditingManagedPermissions(preset.permissions);
+                                            }
+                                          }}
+                                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                                        >
+                                          <option value="">Custom (select manually)</option>
+                                          {ADMIN_PERMISSION_PRESETS.map((preset) => (
+                                            <option key={preset.id} value={preset.id}>
+                                              {preset.label}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                      {ADMIN_PERMISSION_OPTIONS.map((permission) => (
+                                        <label
+                                          key={`${admin.id}-${permission}`}
+                                          className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs"
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={editingManagedPermissions.includes(permission)}
+                                            onChange={(event) =>
+                                              setEditingManagedPermissions((prev) =>
+                                                event.target.checked
+                                                  ? [...prev, permission]
+                                                  : prev.filter((item) => item !== permission),
+                                              )
+                                            }
+                                          />
+                                          <span>{permission}</span>
+                                        </label>
+                                      ))}
+                                    </div>
+                                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                                      <input
+                                        type="checkbox"
+                                        checked={editingManagedIsActive}
+                                        onChange={(event) => setEditingManagedIsActive(event.target.checked)}
+                                      />
+                                      <span>Admin active</span>
+                                    </label>
+                                    <input
+                                      type="password"
+                                      value={editingManagedPassword}
+                                      onChange={(event) => setEditingManagedPassword(event.target.value)}
+                                      placeholder="New password (optional)"
+                                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                                    />
+                                    <div className="md:col-span-2 flex gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={handleUpdateManagedAdmin}
+                                        disabled={isSaving}
+                                        className="rounded-xl bg-[#2b24ff] px-4 py-2 text-xs font-semibold text-white hover:bg-[#221bff] disabled:opacity-70"
+                                      >
+                                        Save Changes
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={cancelManagedAdminEdit}
+                                        className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </Fragment>
+                        ))}
+                        {managedAdmins.length === 0 && (
+                          <tr>
+                            <td colSpan={canManageAdminManagement ? 4 : 3} className="px-3 py-4 text-center text-slate-500">
+                              No managed admins yet.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
+
               {currentTab === "webinar_registrations" && (
                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
                   <h2 className="text-2xl font-semibold">Webinar Management</h2>
@@ -1560,10 +2017,11 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                     Create, update, and delete webinars. View registrations for each webinar.
                   </p>
 
-                  <form
-                    onSubmit={handleWebinarSave}
-                    className="mt-4 grid gap-3 rounded-xl border border-slate-200 p-4 md:grid-cols-2"
-                  >
+                  {canManageWebinar && (
+                    <form
+                      onSubmit={handleWebinarSave}
+                      className="mt-4 grid gap-3 rounded-xl border border-slate-200 p-4 md:grid-cols-2"
+                    >
                     <input
                       required
                       value={webinarTitleInput}
@@ -1622,7 +2080,8 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                         </button>
                       )}
                     </div>
-                  </form>
+                    </form>
+                  )}
 
                   <div className="mt-5 overflow-x-auto rounded-xl border border-slate-200">
                     <table className="min-w-full text-left text-sm">
@@ -1659,32 +2118,36 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                               <div className="flex gap-2">
                                 <button
                                   type="button"
-                                  onClick={() => startWebinarEdit(webinar)}
-                                  className="rounded-lg border border-slate-200 px-3 py-1.5 hover:bg-slate-50"
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  type="button"
                                   onClick={() => void handleCopyWebinarLink(webinar.slug)}
                                   className="rounded-lg border border-[#2b24ff]/20 bg-[#2b24ff]/10 px-3 py-1.5 text-[#2b24ff] hover:bg-[#2b24ff]/15"
                                 >
                                   {copiedWebinarSlug === webinar.slug ? "Copied Link" : "Copy Link"}
                                 </button>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleWebinarActiveToggle(webinar.id, !webinar.is_active)}
-                                  className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-amber-700 hover:bg-amber-100"
-                                >
-                                  {webinar.is_active ? "Deactivate" : "Activate"}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleWebinarDelete(webinar.id)}
-                                  className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-red-700 hover:bg-red-100"
-                                >
-                                  Delete
-                                </button>
+                                {canManageWebinar && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => startWebinarEdit(webinar)}
+                                      className="rounded-lg border border-slate-200 px-3 py-1.5 hover:bg-slate-50"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleWebinarActiveToggle(webinar.id, !webinar.is_active)}
+                                      className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-amber-700 hover:bg-amber-100"
+                                    >
+                                      {webinar.is_active ? "Deactivate" : "Activate"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleWebinarDelete(webinar.id)}
+                                      className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-red-700 hover:bg-red-100"
+                                    >
+                                      Delete
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -1852,13 +2315,17 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                             </td>
                             <td className="px-3 py-2">{row.payment_count || 0}</td>
                             <td className="px-3 py-2">
-                              <button
-                                type="button"
-                                onClick={() => openFeeModal(row)}
-                                className="rounded-lg border border-slate-200 px-3 py-1.5 hover:bg-slate-50"
-                              >
-                                Manage
-                              </button>
+                              {canManageFees ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openFeeModal(row)}
+                                  className="rounded-lg border border-slate-200 px-3 py-1.5 hover:bg-slate-50"
+                                >
+                                  Manage
+                                </button>
+                              ) : (
+                                <span className="text-slate-400">-</span>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -1997,29 +2464,31 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                     <h2 className="text-xl font-semibold">Allowed Students ({allowlist.length})</h2>
                   </div>
 
-                  <form onSubmit={handleAllowlistSave} className="grid gap-3 lg:grid-cols-[1fr_1fr_auto]">
-                    <input
-                      required
-                      value={allowName}
-                      onChange={(event) => setAllowName(event.target.value)}
-                      placeholder="Student name"
-                      className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
-                    />
-                    <input
-                      required
-                      value={allowPhone}
-                      onChange={(event) => setAllowPhone(event.target.value)}
-                      placeholder="WhatsApp number"
-                      className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
-                    />
-                    <button
-                      type="submit"
-                      disabled={isSaving}
-                      className="rounded-xl bg-[#2b24ff] px-6 py-3 font-semibold text-white hover:bg-[#221bff] disabled:opacity-70"
-                    >
-                      Add Student
-                    </button>
-                  </form>
+                  {canManageAllowlist && (
+                    <form onSubmit={handleAllowlistSave} className="grid gap-3 lg:grid-cols-[1fr_1fr_auto]">
+                      <input
+                        required
+                        value={allowName}
+                        onChange={(event) => setAllowName(event.target.value)}
+                        placeholder="Student name"
+                        className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                      />
+                      <input
+                        required
+                        value={allowPhone}
+                        onChange={(event) => setAllowPhone(event.target.value)}
+                        placeholder="WhatsApp number"
+                        className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                      />
+                      <button
+                        type="submit"
+                        disabled={isSaving}
+                        className="rounded-xl bg-[#2b24ff] px-6 py-3 font-semibold text-white hover:bg-[#221bff] disabled:opacity-70"
+                      >
+                        Add Student
+                      </button>
+                    </form>
+                  )}
 
                   <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
                     <table className="min-w-full text-left text-sm">
@@ -2036,24 +2505,28 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                             <td className="px-3 py-2">{row.name}</td>
                             <td className="px-3 py-2">{row.whatsapp_number}</td>
                             <td className="px-3 py-2">
-                              <div className="flex gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => startAllowlistEdit(row)}
-                                  title="Edit"
-                                  className="rounded-md border border-slate-200 p-2 text-slate-600 hover:bg-slate-50"
-                                >
-                                  <ActionIcon path="M16.862 3.487a2.1 2.1 0 1 1 2.97 2.97L8.3 17.99 4 19l1.01-4.3L16.862 3.487Z" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleAllowlistDelete(row.id)}
-                                  title="Delete"
-                                  className="rounded-md border border-red-200 p-2 text-red-600 hover:bg-red-50"
-                                >
-                                  <ActionIcon path="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14" />
-                                </button>
-                              </div>
+                              {canManageAllowlist ? (
+                                <div className="flex gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => startAllowlistEdit(row)}
+                                    title="Edit"
+                                    className="rounded-md border border-slate-200 p-2 text-slate-600 hover:bg-slate-50"
+                                  >
+                                    <ActionIcon path="M16.862 3.487a2.1 2.1 0 1 1 2.97 2.97L8.3 17.99 4 19l1.01-4.3L16.862 3.487Z" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAllowlistDelete(row.id)}
+                                    title="Delete"
+                                    className="rounded-md border border-red-200 p-2 text-red-600 hover:bg-red-50"
+                                  >
+                                    <ActionIcon path="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-slate-400">-</span>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -2579,33 +3052,36 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                     </div>
                   </div>
 
-                  <div className="mt-4 rounded-xl border border-slate-200 p-4">
-                    <h4 className="font-medium">Payment Tracking</h4>
-                    <div className="mt-3 flex flex-wrap items-center gap-3">
-                      <select
-                        value={feePlan}
-                        onChange={(event) =>
-                          setFeePlan(event.target.value as "monthly_3x" | "one_time")
-                        }
-                        className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
-                      >
-                        <option value="monthly_3x">Installment tracking</option>
-                        <option value="one_time">Full-payment tracking</option>
-                      </select>
-                      <button
-                        type="button"
-                        disabled={isSaving}
-                        onClick={handleFeePlanUpdate}
-                        className="rounded-xl bg-[#2b24ff] px-4 py-2 font-semibold text-white hover:bg-[#221bff] disabled:opacity-70"
-                      >
-                        Save Plan
-                      </button>
+                  {canManageFees && (
+                    <div className="mt-4 rounded-xl border border-slate-200 p-4">
+                      <h4 className="font-medium">Payment Tracking</h4>
+                      <div className="mt-3 flex flex-wrap items-center gap-3">
+                        <select
+                          value={feePlan}
+                          onChange={(event) =>
+                            setFeePlan(event.target.value as "monthly_3x" | "one_time")
+                          }
+                          className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
+                        >
+                          <option value="monthly_3x">Installment tracking</option>
+                          <option value="one_time">Full-payment tracking</option>
+                        </select>
+                        <button
+                          type="button"
+                          disabled={isSaving}
+                          onClick={handleFeePlanUpdate}
+                          className="rounded-xl bg-[#2b24ff] px-4 py-2 font-semibold text-white hover:bg-[#221bff] disabled:opacity-70"
+                        >
+                          Save Plan
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
-                  <div className="mt-4 rounded-xl border border-slate-200 p-4">
-                    <h4 className="font-medium">Add Payment Entry</h4>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-5">
+                  {canManageFees && (
+                    <div className="mt-4 rounded-xl border border-slate-200 p-4">
+                      <h4 className="font-medium">Add Payment Entry</h4>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-5">
                       <input
                         type="number"
                         min={1}
@@ -2640,16 +3116,17 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                         placeholder="Notes (optional)"
                         className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40 sm:col-span-2"
                       />
+                      </div>
+                      <button
+                        type="button"
+                        disabled={isSaving}
+                        onClick={handleAddPayment}
+                        className="mt-3 rounded-xl bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-700 disabled:opacity-70"
+                      >
+                        Add Payment
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      disabled={isSaving}
-                      onClick={handleAddPayment}
-                      className="mt-3 rounded-xl bg-emerald-600 px-4 py-2 font-semibold text-white hover:bg-emerald-700 disabled:opacity-70"
-                    >
-                      Add Payment
-                    </button>
-                  </div>
+                  )}
 
                   <div className="mt-4 rounded-xl border border-slate-200">
                     <div className="border-b border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700">
@@ -2673,13 +3150,17 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                                 <td className="px-3 py-2">{formatCurrency(payment.amount)}</td>
                                 <td className="px-3 py-2">{payment.notes || "-"}</td>
                                 <td className="px-3 py-2">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeletePayment(payment.id)}
-                                    className="rounded-md border border-red-200 p-2 text-red-600 hover:bg-red-50"
-                                  >
-                                    <ActionIcon path="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14" />
-                                  </button>
+                                  {canManageFees ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeletePayment(payment.id)}
+                                      className="rounded-md border border-red-200 p-2 text-red-600 hover:bg-red-50"
+                                    >
+                                      <ActionIcon path="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14" />
+                                    </button>
+                                  ) : (
+                                    <span className="text-slate-400">-</span>
+                                  )}
                                 </td>
                               </tr>
                             ))}

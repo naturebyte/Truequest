@@ -6,10 +6,12 @@ type AdminSidebarProps = {
   onTabChange: (tab: AdminTab) => void;
   onLogout: () => void | Promise<void>;
   useRouteNavigation?: boolean;
+  allowedTabs?: AdminTab[];
 };
 
 const tabs: Array<{ id: AdminTab; label: string }> = [
   { id: "overview", label: "Overview" },
+  { id: "admin_management", label: "Admin Management" },
   { id: "registrations", label: "Registrations" },
   { id: "webinar_registrations", label: "Webinar Management" },
   { id: "allowlist", label: "Allowed Students" },
@@ -22,13 +24,17 @@ export function AdminSidebar({
   onTabChange,
   onLogout,
   useRouteNavigation = false,
+  allowedTabs,
 }: AdminSidebarProps) {
+  const visibleTabs = allowedTabs?.length
+    ? tabs.filter((tab) => allowedTabs.includes(tab.id))
+    : tabs;
   return (
     <aside className="flex h-full self-stretch rounded-2xl border border-slate-200 bg-white p-4 shadow-xl lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)] lg:flex-col">
       <h2 className="text-lg font-semibold">Admin Pages</h2>
       <p className="mt-1 text-sm text-slate-600">Select a page to view only that content.</p>
       <nav className="mt-4 space-y-2 lg:flex-1 lg:overflow-y-auto lg:pr-1">
-        {tabs.map((tab) => (
+        {visibleTabs.map((tab) => (
           useRouteNavigation ? (
             <Link
               key={tab.id}

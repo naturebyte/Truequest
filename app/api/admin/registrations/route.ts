@@ -3,8 +3,11 @@ import { sql } from "@/lib/db";
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "crypto";
 import nodemailer from "nodemailer";
 import {
-  getAdminCookieName,
+  adminCan,
+  ensureAdminUsersTable,
   getAdminSessionSecret,
+  resolveAdminSessionFromRequest,
+  type AdminPermission,
 } from "@/lib/admin-auth";
 import {
   isValidWebinarSlug,
@@ -563,18 +566,50 @@ async function ensureTables() {
   `;
 }
 
-function isAuthorized(req: NextRequest): boolean {
-  const authCookie = req.cookies.get(getAdminCookieName())?.value;
-  return authCookie === getAdminSessionSecret();
+async function getSessionOrNull(req: NextRequest) {
+  return resolveAdminSessionFromRequest(req);
+}
+
+function permissionForAction(action: string, method: "POST" | "PATCH" | "DELETE"): AdminPermission {
+  if (method === "POST") {
+    if (action === "allowlist_add") return "allowed_students:manage";
+    if (action === "webinar_create") return "webinar_management:manage";
+  }
+  if (method === "PATCH") {
+    if (action.startsWith("allowlist_")) return "allowed_students:manage";
+    if (action.startsWith("webinar_")) return "webinar_management:manage";
+    if (action.startsWith("registration_")) return "registrations:manage";
+    if (action.startsWith("smtp_") || action.startsWith("next_batch_")) return "overview:manage";
+    if (action === "notification_send_email") return "brochure_requests:manage";
+  }
+  if (method === "DELETE") {
+    if (action === "allowlist_delete") return "allowed_students:manage";
+    if (action === "webinar_delete") return "webinar_management:manage";
+    if (action === "registration_delete") return "registrations:manage";
+    if (action === "registration_payment_delete") return "fees:manage";
+  }
+  return "overview:manage";
 }
 
 export async function GET(req: NextRequest) {
   try {
-    if (!isAuthorized(req)) {
+    const session = await getSessionOrNull(req);
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const canViewAny =
+      adminCan(session, "overview:view") ||
+      adminCan(session, "registrations:view") ||
+      adminCan(session, "webinar_management:view") ||
+      adminCan(session, "allowed_students:view") ||
+      adminCan(session, "brochure_requests:view") ||
+      adminCan(session, "fees:view");
+    if (!canViewAny) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     await ensureTables();
+    await ensureAdminUsersTable();
 
     const registrations = (await sql`
       WITH fee_stats AS (
@@ -842,12 +877,13 @@ export async function GET(req: NextRequest) {
     };
 
     const adminSettingsRows = (await sql`
-      SELECT next_batch_start_date
+      SELECT next_batch_start_date, updated_at
       FROM admin_settings
       WHERE id = 1
       LIMIT 1
-    `) as Array<{ next_batch_start_date: string | null }>;
+    `) as Array<{ next_batch_start_date: string | null; updated_at: string | null }>;
     const nextBatchStartDate = adminSettingsRows[0]?.next_batch_start_date || null;
+    const nextBatchUpdatedAt = adminSettingsRows[0]?.updated_at || null;
 
     return NextResponse.json(
       {
@@ -860,6 +896,12 @@ export async function GET(req: NextRequest) {
         notificationRequestedUsers,
         smtpSettings,
         nextBatchStartDate,
+        nextBatchUpdatedAt,
+        auth: {
+          username: session.username,
+          isSuperAdmin: session.isSuperAdmin,
+          permissions: session.permissions,
+        },
       },
       { status: 200 },
     );
@@ -874,13 +916,18 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    if (!isAuthorized(req)) {
+    const session = await getSessionOrNull(req);
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     await ensureTables();
     const body = await req.json().catch(() => ({}));
     const action = normalizeString(body.action);
+    const requiredPermission = permissionForAction(action, "POST");
+    if (!adminCan(session, requiredPermission)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     if (action === "allowlist_add") {
       const name = normalizeString(body.name);
@@ -955,13 +1002,18 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    if (!isAuthorized(req)) {
+    const session = await getSessionOrNull(req);
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     await ensureTables();
     const body = await req.json().catch(() => ({}));
     const action = normalizeString(body.action);
+    const requiredPermission = permissionForAction(action, "PATCH");
+    if (!adminCan(session, requiredPermission)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
 
     if (action === "allowlist_edit") {
       const id = Number(body.id);
@@ -1546,13 +1598,18 @@ export async function PATCH(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    if (!isAuthorized(req)) {
+    const session = await getSessionOrNull(req);
+    if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     await ensureTables();
     const body = await req.json().catch(() => ({}));
     const action = normalizeString(body.action);
+    const requiredPermission = permissionForAction(action, "DELETE");
+    if (!adminCan(session, requiredPermission)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     const id = Number(body.id);
 
     if (!id) {

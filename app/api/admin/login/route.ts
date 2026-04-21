@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  authenticateAdmin,
+  createAdminSessionToken,
   getAdminCookieName,
-  getAdminPassword,
-  getAdminSessionSecret,
-  getAdminUsername,
 } from "@/lib/admin-auth";
 
 function normalizeString(value: unknown): string {
@@ -16,7 +15,8 @@ export async function POST(req: NextRequest) {
     const username = normalizeString(body.username);
     const password = normalizeString(body.password);
 
-    if (username !== getAdminUsername() || password !== getAdminPassword()) {
+    const authenticated = await authenticateAdmin(username, password);
+    if (!authenticated) {
       return NextResponse.json(
         { error: "Invalid username or password." },
         { status: 401 },
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
     const response = NextResponse.json({ status: "authenticated" }, { status: 200 });
     response.cookies.set({
       name: getAdminCookieName(),
-      value: getAdminSessionSecret(),
+      value: createAdminSessionToken(authenticated),
       httpOnly: true,
       sameSite: "lax",
       path: "/",
