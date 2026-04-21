@@ -194,8 +194,8 @@ export default function WebinarRegistrationClient({
               priority
             />
           )}
-          <h1 className="mt-6 text-3xl sm:text-4xl font-bold">Webinar Registration Form</h1>
-          <p className="mt-2 text-white/80">Register now to reserve your webinar seat.</p>
+          <h1 className="mt-6 text-3xl sm:text-4xl font-bold">Registration Form</h1>
+          <p className="mt-2 text-white/80">Register now to reserve your  seat.</p>
         </div>
 
         <form

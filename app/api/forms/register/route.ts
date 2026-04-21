@@ -4,6 +4,7 @@ import nodemailer from "nodemailer";
 import { createDecipheriv, scryptSync } from "crypto";
 
 type CourseSelection = "DM" | "HR" | null;
+type AttendanceMode = "online" | "offline" | null;
 type ReviewStatus = "approved" | "under_review";
 const REGISTRATION_NUMBER_BASE = 786;
 
@@ -21,16 +22,36 @@ function parseCourse(value: unknown): CourseSelection {
   return null;
 }
 
-function getRegistrationNumber(course: CourseSelection, sequenceNumber: number): string {
+function parseAttendanceMode(value: unknown): AttendanceMode {
+  const mode = normalizeString(value).toLowerCase();
+
+  if (mode === "online" || mode === "offline") {
+    return mode;
+  }
+
+  return null;
+}
+
+function getRegistrationNumber(
+  course: CourseSelection,
+  attendanceMode: AttendanceMode,
+  sequenceNumber: number,
+): string {
+  const prefixBase = attendanceMode === "online" ? "TQLO" : "TQL";
+
   if (course === "DM") {
-    return `TQLDM${sequenceNumber}`;
+    return `${prefixBase}DM${sequenceNumber}`;
   }
 
   if (course === "HR") {
-    return `TQLHR${sequenceNumber}`;
+    return `${prefixBase}HR${sequenceNumber}`;
   }
 
-  return `TQLGEN${sequenceNumber}`;
+  return `${prefixBase}GEN${sequenceNumber}`;
+}
+
+function getTotalFee(attendanceMode: AttendanceMode): number {
+  return attendanceMode === "offline" ? 30000 : 25000;
 }
 
 function isEncryptedSmtpPassword(value: string): boolean {
@@ -78,10 +99,10 @@ function buildRegistrationCongratsHtml({
     courseSelected === "HR" ? "Human Resource (HR)" : courseSelected === "DM" ? "Digital Marketing" : "General";
   const nextBatchLabel = nextBatchStartDate
     ? new Date(nextBatchStartDate).toLocaleDateString("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    })
     : "To be announced";
 
   return `<!doctype html>
@@ -198,10 +219,10 @@ function buildRegistrationUnderReviewHtml({
 }): string {
   const nextBatchLabel = nextBatchStartDate
     ? new Date(nextBatchStartDate).toLocaleDateString("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    })
     : "To be announced";
 
   return `<!doctype html>
@@ -495,6 +516,52 @@ async function ensureTables() {
 
   await sql`
     ALTER TABLE student_registrations
+    ADD COLUMN IF NOT EXISTS fee_plan text NOT NULL DEFAULT 'monthly_3x'
+  `;
+
+  await sql`
+    ALTER TABLE student_registrations
+    ADD COLUMN IF NOT EXISTS total_fee integer NOT NULL DEFAULT 30000
+  `;
+
+  await sql`
+    ALTER TABLE student_registrations
+    ADD COLUMN IF NOT EXISTS learning_mode text
+  `;
+
+  await sql`
+    ALTER TABLE student_registrations
+    ADD COLUMN IF NOT EXISTS academic_qualification text
+  `;
+
+  await sql`
+    UPDATE student_registrations
+    SET academic_qualification = qualification
+    WHERE academic_qualification IS NULL
+      AND lower(qualification) NOT IN ('online', 'offline')
+  `;
+
+  await sql`
+    UPDATE student_registrations
+    SET learning_mode = qualification
+    WHERE learning_mode IS NULL
+      AND lower(qualification) IN ('online', 'offline')
+  `;
+
+  await sql`
+    UPDATE student_registrations
+    SET learning_mode = CASE
+      WHEN lower(qualification) IN ('online', 'offline') THEN lower(qualification)
+      WHEN reg_no LIKE 'TQLO%' THEN 'online'
+      WHEN reg_no LIKE 'TQL%' THEN 'offline'
+      ELSE NULL
+    END
+    WHERE learning_mode IS NULL
+       OR lower(learning_mode) NOT IN ('online', 'offline')
+  `;
+
+  await sql`
+    ALTER TABLE student_registrations
     ALTER COLUMN reg_no DROP NOT NULL
   `;
 
@@ -550,7 +617,8 @@ export async function GET(req: NextRequest) {
         whatsapp_number,
         email_id,
         course_selected,
-        qualification,
+        COALESCE(academic_qualification, qualification) AS qualification,
+        learning_mode,
         current_status,
         last_institution_attended,
         place,
@@ -567,6 +635,7 @@ export async function GET(req: NextRequest) {
       email_id: string;
       course_selected: string | null;
       qualification: string;
+      learning_mode: string | null;
       current_status: string | null;
       last_institution_attended: string | null;
       place: string;
@@ -631,12 +700,13 @@ export async function POST(req: NextRequest) {
     const emailId = normalizeString(body.emailId).toLowerCase();
     const courseSelected = parseCourse(body.courseSelected);
     const qualification = normalizeString(body.qualification);
+    const attendanceMode = parseAttendanceMode(body.learningMode);
     const currentStatus = normalizeString(body.currentStatus);
     const lastInstitutionAttended = normalizeString(body.lastInstitutionAttended);
     const place = normalizeString(body.place);
     const dateOfBirth = normalizeString(body.dateOfBirth);
 
-    if (!name || !whatsappNumber || !emailId || !qualification || !place || !dateOfBirth) {
+    if (!name || !whatsappNumber || !emailId || !qualification || !attendanceMode || !place || !dateOfBirth) {
       return NextResponse.json(
         { error: "Please fill all required fields." },
         { status: 400 },
@@ -679,10 +749,11 @@ export async function POST(req: NextRequest) {
     const isAllowlisted = Boolean(allowlistRow[0]);
     let regNo: string | null = null;
     const reviewStatus: ReviewStatus = isAllowlisted ? "approved" : "under_review";
+    const totalFee = getTotalFee(attendanceMode);
 
     if (isAllowlisted) {
       const nextSequence = await getNextRegistrationSequence();
-      regNo = getRegistrationNumber(courseSelected, nextSequence);
+      regNo = getRegistrationNumber(courseSelected, attendanceMode, nextSequence);
     }
 
     await sql`
@@ -693,10 +764,13 @@ export async function POST(req: NextRequest) {
         email_id,
         course_selected,
         qualification,
+        academic_qualification,
+        learning_mode,
         current_status,
         last_institution_attended,
         place,
         date_of_birth,
+        total_fee,
         review_status,
         updated_at
       ) VALUES (
@@ -706,10 +780,13 @@ export async function POST(req: NextRequest) {
         ${emailId},
         ${courseSelected},
         ${qualification},
+        ${qualification},
+        ${attendanceMode},
         ${currentStatus || null},
         ${lastInstitutionAttended || null},
         ${place},
         ${dateOfBirth},
+        ${totalFee},
         ${reviewStatus},
         now()
       )
@@ -719,10 +796,13 @@ export async function POST(req: NextRequest) {
         email_id = EXCLUDED.email_id,
         course_selected = EXCLUDED.course_selected,
         qualification = EXCLUDED.qualification,
+        academic_qualification = EXCLUDED.academic_qualification,
+        learning_mode = EXCLUDED.learning_mode,
         current_status = EXCLUDED.current_status,
         last_institution_attended = EXCLUDED.last_institution_attended,
         place = EXCLUDED.place,
         date_of_birth = EXCLUDED.date_of_birth,
+        total_fee = EXCLUDED.total_fee,
         review_status = EXCLUDED.review_status,
         reg_no = EXCLUDED.reg_no,
         updated_at = now()

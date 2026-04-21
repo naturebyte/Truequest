@@ -104,7 +104,7 @@ export function absoluteWebinarRegistrationUrl(slug: string, siteBaseUrl: string
 /** Plain-text body for WhatsApp / system share (URL must be absolute HTTPS in production). */
 export function buildWebinarShareBody(webinarTitle: string, registrationAbsoluteUrl: string): string {
   const titleLine = webinarTitle.trim()
-    ? `Register for this TrueQuest webinar: ${webinarTitle.trim()}`
-    : "Register for this TrueQuest webinar";
+    ? `Register for this TrueQuest offline workshop: ${webinarTitle.trim()}`
+    : "Register for this TrueQuest offline workshop";
   return `${titleLine}\n\n🎓 Chance to win scholarships up to ₹100000\n\nRegister Now 👉 ${registrationAbsoluteUrl}`;
 }
