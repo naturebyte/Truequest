@@ -307,6 +307,7 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
     hasPermission(TAB_VIEW_PERMISSION[tab]),
   );
   const canManageOverview = hasPermission("overview:manage");
+  const canManageRegistrations = hasPermission("registrations:manage");
   const canManageFees = hasPermission("fees:manage");
   const canManageWebinar = hasPermission("webinar_management:manage");
   const canManageAllowlist = hasPermission("allowed_students:manage");
@@ -2676,34 +2677,38 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                             <td className="px-3 py-2">{formatDate(row.date_of_birth)}</td>
                             <td className="px-3 py-2">{getAgeFromDateOfBirth(row.date_of_birth)}</td>
                             <td className="px-3 py-2">
-                              <div className="flex gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => startRegistrationEdit(row)}
-                                  title="Edit"
-                                  className="rounded-md border border-slate-200 p-2 text-slate-600 hover:bg-slate-50"
-                                >
-                                  <ActionIcon path="M16.862 3.487a2.1 2.1 0 1 1 2.97 2.97L8.3 17.99 4 19l1.01-4.3L16.862 3.487Z" />
-                                </button>
-                                {row.review_status === "under_review" && (
+                              {canManageRegistrations ? (
+                                <div className="flex gap-2">
                                   <button
                                     type="button"
-                                    onClick={() => handleApprove(row.id)}
-                                    title="Approve"
-                                    className="rounded-md border border-emerald-200 p-2 text-emerald-700 hover:bg-emerald-50"
+                                    onClick={() => startRegistrationEdit(row)}
+                                    title="Edit"
+                                    className="rounded-md border border-slate-200 p-2 text-slate-600 hover:bg-slate-50"
                                   >
-                                    <ActionIcon path="M5 12l4 4L19 6" />
+                                    <ActionIcon path="M16.862 3.487a2.1 2.1 0 1 1 2.97 2.97L8.3 17.99 4 19l1.01-4.3L16.862 3.487Z" />
                                   </button>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={() => handleRegistrationDelete(row.id)}
-                                  title="Delete"
-                                  className="rounded-md border border-red-200 p-2 text-red-600 hover:bg-red-50"
-                                >
-                                  <ActionIcon path="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14" />
-                                </button>
-                              </div>
+                                  {row.review_status === "under_review" && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleApprove(row.id)}
+                                      title="Approve"
+                                      className="rounded-md border border-emerald-200 p-2 text-emerald-700 hover:bg-emerald-50"
+                                    >
+                                      <ActionIcon path="M5 12l4 4L19 6" />
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRegistrationDelete(row.id)}
+                                    title="Delete"
+                                    className="rounded-md border border-red-200 p-2 text-red-600 hover:bg-red-50"
+                                  >
+                                    <ActionIcon path="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-slate-400">-</span>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -2799,7 +2804,7 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
               </div>
             )}
 
-            {isRegistrationEditModalOpen && editingRegData && (
+            {canManageRegistrations && isRegistrationEditModalOpen && editingRegData && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
                 <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
                   <h3 className="text-lg font-semibold">Edit Registration</h3>
