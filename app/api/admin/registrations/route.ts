@@ -357,6 +357,14 @@ function getTotalFee(attendanceMode: AttendanceMode): number {
   return attendanceMode === "offline" ? 30000 : 25000;
 }
 
+function getBatchId(course: CourseSelection, attendanceMode: AttendanceMode): string | null {
+  if (course === "DM" && attendanceMode === "offline") return "TQLDM01";
+  if (course === "HR" && attendanceMode === "offline") return "TQLHR01";
+  if (course === "DM" && attendanceMode === "online") return "TQLODM01";
+  if (course === "HR" && attendanceMode === "online") return "TQLOHR01";
+  return null;
+}
+
 async function getNextRegistrationSequence(): Promise<number> {
   const maxSequenceResult = (await sql`
     SELECT COALESCE(MAX((substring(reg_no FROM '([0-9]+)$'))::int), ${REGISTRATION_NUMBER_BASE - 1}) AS max_sequence
@@ -382,6 +390,7 @@ async function ensureTables() {
     CREATE TABLE IF NOT EXISTS student_registrations (
       id serial PRIMARY KEY,
       reg_no text UNIQUE,
+      batch_id text,
       name text NOT NULL,
       whatsapp_number text UNIQUE NOT NULL,
       email_id text NOT NULL,
@@ -429,6 +438,11 @@ async function ensureTables() {
 
   await sql`
     ALTER TABLE student_registrations
+    ADD COLUMN IF NOT EXISTS batch_id text
+  `;
+
+  await sql`
+    ALTER TABLE student_registrations
     ADD COLUMN IF NOT EXISTS academic_qualification text
   `;
 
@@ -456,6 +470,19 @@ async function ensureTables() {
     END
     WHERE learning_mode IS NULL
        OR lower(learning_mode) NOT IN ('online', 'offline')
+  `;
+
+  await sql`
+    UPDATE student_registrations
+    SET batch_id = CASE
+      WHEN upper(course_selected) = 'DM' AND lower(learning_mode) = 'offline' THEN 'TQLDM01'
+      WHEN upper(course_selected) = 'HR' AND lower(learning_mode) = 'offline' THEN 'TQLHR01'
+      WHEN upper(course_selected) = 'DM' AND lower(learning_mode) = 'online' THEN 'TQLODM01'
+      WHEN upper(course_selected) = 'HR' AND lower(learning_mode) = 'online' THEN 'TQLOHR01'
+      ELSE NULL
+    END
+    WHERE batch_id IS NULL
+       OR batch_id NOT IN ('TQLDM01', 'TQLHR01', 'TQLODM01', 'TQLOHR01')
   `;
 
   await sql`
@@ -644,6 +671,7 @@ export async function GET(req: NextRequest) {
       SELECT
         id,
         reg_no,
+        batch_id,
         name,
         whatsapp_number,
         email_id,
@@ -670,6 +698,7 @@ export async function GET(req: NextRequest) {
     `) as Array<{
       id: number;
       reg_no: string;
+      batch_id: string | null;
       name: string;
       whatsapp_number: string;
       email_id: string;
@@ -1108,6 +1137,7 @@ export async function PATCH(req: NextRequest) {
       const dateOfBirth = normalizeString(body.dateOfBirth);
       const feePlan = parseFeePlan(body.feePlan);
       const totalFee = getTotalFee(attendanceMode);
+      const batchId = getBatchId(courseSelected, attendanceMode);
 
       if (!id || !name || !emailId || !qualification || !attendanceMode || !place || !dateOfBirth) {
         return NextResponse.json({ error: "Please fill all required fields." }, { status: 400 });
@@ -1126,6 +1156,7 @@ export async function PATCH(req: NextRequest) {
           last_institution_attended = ${lastInstitutionAttended || null},
           place = ${place},
           date_of_birth = ${dateOfBirth},
+          batch_id = ${batchId},
           fee_plan = ${feePlan},
           total_fee = ${totalFee},
           updated_at = now()

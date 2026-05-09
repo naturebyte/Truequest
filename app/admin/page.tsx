@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, Fragment, useEffect, useState } from "react";
 import { ActionIcon } from "./components/ActionIcon";
+import { AdminMobileSidebar } from "./components/AdminMobileSidebar";
 import { AdminSidebar } from "./components/AdminSidebar";
 import { LoginForm } from "./components/LoginForm";
 import { ReviewBadge } from "./components/ReviewBadge";
@@ -179,6 +180,15 @@ function getRegistrationLearningMode(
   return null;
 }
 
+function getRegistrationBatchType(regNo: string | null): "online" | "offline" | null {
+  const normalizedRegNo = regNo?.trim().toUpperCase();
+  if (!normalizedRegNo) {
+    return null;
+  }
+
+  return /O(?:DM|HR)/.test(normalizedRegNo) ? "online" : "offline";
+}
+
 function formatLearningMode(value: "online" | "offline" | null): string {
   if (value === "online") {
     return "Online";
@@ -204,6 +214,7 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [registrations, setRegistrations] = useState<RegistrationRecord[]>([]);
   const [allowlist, setAllowlist] = useState<AllowlistRecord[]>([]);
   const [transactions, setTransactions] = useState<FeeTransaction[]>([]);
@@ -228,11 +239,8 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
   const [registrationsPage, setRegistrationsPage] = useState(1);
   const [registrationSearchTerm, setRegistrationSearchTerm] = useState("");
   const [registrationCourseFilter, setRegistrationCourseFilter] = useState<"all" | "HR" | "DM">("all");
-  const [registrationReviewFilter, setRegistrationReviewFilter] = useState<
-    "all" | "approved" | "under_review"
-  >("all");
-  const [registrationPaymentFilter, setRegistrationPaymentFilter] = useState<
-    "all" | "fully_paid" | "pending_fee"
+  const [registrationBatchTypeFilter, setRegistrationBatchTypeFilter] = useState<
+    "all" | "online" | "offline"
   >("all");
   const [hrBrochurePage, setHrBrochurePage] = useState(1);
   const [dmBrochurePage, setDmBrochurePage] = useState(1);
@@ -1190,14 +1198,11 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
     const matchesCourse =
       registrationCourseFilter === "all" || row.course_selected === registrationCourseFilter;
 
-    const matchesReview =
-      registrationReviewFilter === "all" || row.review_status === registrationReviewFilter;
+    const batchType = getRegistrationBatchType(row.reg_no);
+    const matchesBatchType =
+      registrationBatchTypeFilter === "all" || batchType === registrationBatchTypeFilter;
 
-    const matchesPayment =
-      registrationPaymentFilter === "all" ||
-      (registrationPaymentFilter === "fully_paid" ? row.pending_fee <= 0 : row.pending_fee > 0);
-
-    return matchesSearch && matchesCourse && matchesReview && matchesPayment;
+    return matchesSearch && matchesCourse && matchesBatchType;
   });
   const registrationsTotalPages = Math.max(
     1,
@@ -1265,7 +1270,7 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
 
   useEffect(() => {
     setRegistrationsPage(1);
-  }, [registrationSearchTerm, registrationCourseFilter, registrationReviewFilter, registrationPaymentFilter]);
+  }, [registrationSearchTerm, registrationCourseFilter, registrationBatchTypeFilter]);
 
   useEffect(() => {
     if (hrBrochurePage > hrBrochureTotalPages) {
@@ -1325,7 +1330,7 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
   }, [selectedFeeRegistration?.id]);
 
   return (
-    <main className="min-h-screen bg-white py-6 text-slate-900 sm:py-8">
+    <main className="min-h-screen overflow-x-hidden bg-white py-6 text-slate-900 sm:py-8">
       <div className="w-full px-3 sm:px-5 lg:px-6">
         {isInitializing ? (
           <div className="flex min-h-[calc(100vh-12rem)] items-center justify-center">
@@ -1354,21 +1359,33 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
               allowedTabs={allowedTabs}
             />
 
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h1 className="text-3xl font-bold text-[#2b24ff] sm:text-4xl">Admin Panel</h1>
-                <button
-                  type="button"
-                  onClick={handleRefreshData}
-                  disabled={isRefreshing}
-                  title="Refresh data"
-                  className="rounded-lg border border-[#2b24ff]/20 bg-[#2b24ff]/10 p-2 text-[#2b24ff] hover:bg-[#2b24ff]/15 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <ActionIcon
-                    path="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"
-                    className={`h-5 w-5 ${isRefreshing ? "animate-spin" : ""}`}
-                  />
-                </button>
+            <div className="min-w-0 space-y-6 [&_table]:min-w-[760px] [&_table]:text-xs [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap sm:[&_table]:min-w-full sm:[&_table]:text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsMobileMenuOpen(true)}
+                    className="rounded-lg border border-slate-200 bg-white p-2 text-slate-700 lg:hidden"
+                    aria-label="Open menu"
+                  >
+                    <ActionIcon path="M3 6h18M3 12h18M3 18h18" className="h-5 w-5" />
+                  </button>
+                  <h1 className="text-3xl font-bold text-[#2b24ff] sm:text-4xl">Admin Panel</h1>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleRefreshData}
+                    disabled={isRefreshing}
+                    title="Refresh data"
+                    className="rounded-lg border border-[#2b24ff]/20 bg-[#2b24ff]/10 p-2 text-[#2b24ff] hover:bg-[#2b24ff]/15 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <ActionIcon
+                      path="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"
+                      className={`h-5 w-5 ${isRefreshing ? "animate-spin" : ""}`}
+                    />
+                  </button>
+                </div>
               </div>
               {currentTab === "overview" && (
                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
@@ -2596,30 +2613,17 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                       <option value="DM">DM</option>
                     </select>
                     <select
-                      value={registrationReviewFilter}
+                      value={registrationBatchTypeFilter}
                       onChange={(event) =>
-                        setRegistrationReviewFilter(
-                          event.target.value as "all" | "approved" | "under_review",
+                        setRegistrationBatchTypeFilter(
+                          event.target.value as "all" | "online" | "offline",
                         )
                       }
                       className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
                     >
-                      <option value="all">All Reviews</option>
-                      <option value="approved">Approved</option>
-                      <option value="under_review">Under Review</option>
-                    </select>
-                    <select
-                      value={registrationPaymentFilter}
-                      onChange={(event) =>
-                        setRegistrationPaymentFilter(
-                          event.target.value as "all" | "fully_paid" | "pending_fee",
-                        )
-                      }
-                      className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/40"
-                    >
-                      <option value="all">All Payment States</option>
-                      <option value="fully_paid">Fully Paid</option>
-                      <option value="pending_fee">Pending Fee</option>
+                      <option value="all">All Batch Types</option>
+                      <option value="online">Online</option>
+                      <option value="offline">Offline</option>
                     </select>
                   </div>
 
@@ -2628,13 +2632,14 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                       <thead>
                         <tr className="border-b border-slate-200 bg-slate-50 text-slate-700">
                           <th className="px-3 py-2">Reg No</th>
+                          <th className="px-3 py-2">Batch ID</th>
                           <th className="px-3 py-2">Review</th>
                           <th className="px-3 py-2">Name</th>
                           <th className="px-3 py-2">WhatsApp</th>
                           <th className="px-3 py-2">Email</th>
                           <th className="px-3 py-2">Course</th>
                           <th className="px-3 py-2">Qualification</th>
-                          <th className="px-3 py-2">Mode</th>
+                          <th className="px-3 py-2">Batch Type</th>
                           <th className="px-3 py-2">Status</th>
                           <th className="px-3 py-2">Institution</th>
                           <th className="px-3 py-2">Place</th>
@@ -2660,6 +2665,7 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                                 "-"
                               )}
                             </td>
+                            <td className="px-3 py-2">{row.batch_id || "-"}</td>
                             <td className="px-3 py-2">
                               <ReviewBadge status={row.review_status} />
                             </td>
@@ -2669,7 +2675,7 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                             <td className="px-3 py-2">{row.course_selected || "-"}</td>
                             <td className="px-3 py-2">{row.qualification || "-"}</td>
                             <td className="px-3 py-2">
-                              {formatLearningMode(getRegistrationLearningMode(row))}
+                              {formatLearningMode(getRegistrationBatchType(row.reg_no))}
                             </td>
                             <td className="px-3 py-2">{row.current_status || "-"}</td>
                             <td className="px-3 py-2">{row.last_institution_attended || "-"}</td>
@@ -2714,7 +2720,7 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                         ))}
                         {paginatedRegistrations.length === 0 && (
                           <tr>
-                            <td colSpan={13} className="px-3 py-6 text-center text-slate-500">
+                            <td colSpan={15} className="px-3 py-6 text-center text-slate-500">
                               No registrations submitted yet.
                             </td>
                           </tr>
@@ -2946,6 +2952,10 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                     <div className="rounded-xl border border-slate-200 p-3">
                       <p className="text-xs uppercase text-slate-500">Course</p>
                       <p className="mt-1 font-medium">{selectedRegistrationDetails.course_selected || "-"}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 p-3">
+                      <p className="text-xs uppercase text-slate-500">Batch ID</p>
+                      <p className="mt-1 font-medium">{selectedRegistrationDetails.batch_id || "-"}</p>
                     </div>
                     <div className="rounded-xl border border-slate-200 p-3">
                       <p className="text-xs uppercase text-slate-500">Qualification</p>
@@ -3210,6 +3220,15 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
           </Link>
         </div>
       </div>
+      {isAuthenticated && !isInitializing && isMobileMenuOpen && (
+        <AdminMobileSidebar
+          activeTab={currentTab}
+          onTabChange={setActiveTab}
+          onLogout={handleLogout}
+          onClose={() => setIsMobileMenuOpen(false)}
+          allowedTabs={allowedTabs}
+        />
+      )}
     </main>
   );
 }

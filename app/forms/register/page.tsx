@@ -246,9 +246,10 @@ export default function StudentRegistrationPage() {
 
           <label className="block">
             <span className="mb-1 block text-sm text-white/90">
-              4. Course Selected (DM / HR)
+              4. Course Selected (DM / HR) *
             </span>
             <select
+              required
               disabled={isAlreadyRegistered}
               value={formData.courseSelected}
               onChange={(event) =>

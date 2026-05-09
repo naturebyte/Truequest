@@ -9,14 +9,14 @@ type AdminSidebarProps = {
   allowedTabs?: AdminTab[];
 };
 
-const tabs: Array<{ id: AdminTab; label: string }> = [
-  { id: "overview", label: "Overview" },
-  { id: "admin_management", label: "Admin Management" },
-  { id: "registrations", label: "Registrations" },
-  { id: "webinar_registrations", label: "Webinar Management" },
-  { id: "allowlist", label: "Allowed Students" },
-  { id: "fees", label: "Fee Management" },
-  { id: "brochure_requests", label: "Brochure Requests" },
+export const ADMIN_TAB_ITEMS: Array<{ id: AdminTab; label: string; shortLabel: string }> = [
+  { id: "overview", label: "Overview", shortLabel: "Home" },
+  { id: "admin_management", label: "Admin Management", shortLabel: "Admins" },
+  { id: "registrations", label: "Registrations", shortLabel: "Regs" },
+  { id: "webinar_registrations", label: "Webinar Management", shortLabel: "Webinar" },
+  { id: "allowlist", label: "Allowed Students", shortLabel: "Allowed" },
+  { id: "fees", label: "Fee Management", shortLabel: "Fees" },
+  { id: "brochure_requests", label: "Brochure Requests", shortLabel: "Brochure" },
 ];
 
 export function AdminSidebar({
@@ -27,10 +27,10 @@ export function AdminSidebar({
   allowedTabs,
 }: AdminSidebarProps) {
   const visibleTabs = allowedTabs?.length
-    ? tabs.filter((tab) => allowedTabs.includes(tab.id))
-    : tabs;
+    ? ADMIN_TAB_ITEMS.filter((tab) => allowedTabs.includes(tab.id))
+    : ADMIN_TAB_ITEMS;
   return (
-    <aside className="flex h-full self-stretch rounded-2xl border border-slate-200 bg-white p-4 shadow-xl lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)] lg:flex-col">
+    <aside className="hidden h-full self-stretch rounded-2xl border border-slate-200 bg-white p-4 shadow-xl lg:sticky lg:top-6 lg:flex lg:h-[calc(100vh-3rem)] lg:flex-col">
       <h2 className="text-lg font-semibold">Admin Pages</h2>
       <p className="mt-1 text-sm text-slate-600">Select a page to view only that content.</p>
       <nav className="mt-4 space-y-2 lg:flex-1 lg:overflow-y-auto lg:pr-1">

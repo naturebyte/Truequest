@@ -54,6 +54,14 @@ function getTotalFee(attendanceMode: AttendanceMode): number {
   return attendanceMode === "offline" ? 30000 : 25000;
 }
 
+function getBatchId(course: CourseSelection, attendanceMode: AttendanceMode): string | null {
+  if (course === "DM" && attendanceMode === "offline") return "TQLDM01";
+  if (course === "HR" && attendanceMode === "offline") return "TQLHR01";
+  if (course === "DM" && attendanceMode === "online") return "TQLODM01";
+  if (course === "HR" && attendanceMode === "online") return "TQLOHR01";
+  return null;
+}
+
 function isEncryptedSmtpPassword(value: string): boolean {
   return value.startsWith("enc:v1:");
 }
@@ -489,6 +497,7 @@ async function ensureTables() {
     CREATE TABLE IF NOT EXISTS student_registrations (
       id serial PRIMARY KEY,
       reg_no text UNIQUE,
+      batch_id text,
       name text NOT NULL,
       whatsapp_number text UNIQUE NOT NULL,
       email_id text NOT NULL,
@@ -531,6 +540,11 @@ async function ensureTables() {
 
   await sql`
     ALTER TABLE student_registrations
+    ADD COLUMN IF NOT EXISTS batch_id text
+  `;
+
+  await sql`
+    ALTER TABLE student_registrations
     ADD COLUMN IF NOT EXISTS academic_qualification text
   `;
 
@@ -558,6 +572,19 @@ async function ensureTables() {
     END
     WHERE learning_mode IS NULL
        OR lower(learning_mode) NOT IN ('online', 'offline')
+  `;
+
+  await sql`
+    UPDATE student_registrations
+    SET batch_id = CASE
+      WHEN upper(course_selected) = 'DM' AND lower(learning_mode) = 'offline' THEN 'TQLDM01'
+      WHEN upper(course_selected) = 'HR' AND lower(learning_mode) = 'offline' THEN 'TQLHR01'
+      WHEN upper(course_selected) = 'DM' AND lower(learning_mode) = 'online' THEN 'TQLODM01'
+      WHEN upper(course_selected) = 'HR' AND lower(learning_mode) = 'online' THEN 'TQLOHR01'
+      ELSE NULL
+    END
+    WHERE batch_id IS NULL
+       OR batch_id NOT IN ('TQLDM01', 'TQLHR01', 'TQLODM01', 'TQLOHR01')
   `;
 
   await sql`
@@ -705,8 +732,18 @@ export async function POST(req: NextRequest) {
     const lastInstitutionAttended = normalizeString(body.lastInstitutionAttended);
     const place = normalizeString(body.place);
     const dateOfBirth = normalizeString(body.dateOfBirth);
+    const batchId = getBatchId(courseSelected, attendanceMode);
 
-    if (!name || !whatsappNumber || !emailId || !qualification || !attendanceMode || !place || !dateOfBirth) {
+    if (
+      !name ||
+      !whatsappNumber ||
+      !emailId ||
+      !courseSelected ||
+      !qualification ||
+      !attendanceMode ||
+      !place ||
+      !dateOfBirth
+    ) {
       return NextResponse.json(
         { error: "Please fill all required fields." },
         { status: 400 },
@@ -770,6 +807,7 @@ export async function POST(req: NextRequest) {
         last_institution_attended,
         place,
         date_of_birth,
+        batch_id,
         total_fee,
         review_status,
         updated_at
@@ -786,6 +824,7 @@ export async function POST(req: NextRequest) {
         ${lastInstitutionAttended || null},
         ${place},
         ${dateOfBirth},
+        ${batchId},
         ${totalFee},
         ${reviewStatus},
         now()
@@ -802,6 +841,7 @@ export async function POST(req: NextRequest) {
         last_institution_attended = EXCLUDED.last_institution_attended,
         place = EXCLUDED.place,
         date_of_birth = EXCLUDED.date_of_birth,
+        batch_id = EXCLUDED.batch_id,
         total_fee = EXCLUDED.total_fee,
         review_status = EXCLUDED.review_status,
         reg_no = EXCLUDED.reg_no,

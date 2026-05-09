@@ -9,6 +9,7 @@ export type FeePayment = {
 export type RegistrationRecord = {
   id: number;
   reg_no: string | null;
+  batch_id: string | null;
   name: string;
   whatsapp_number: string;
   email_id: string;
