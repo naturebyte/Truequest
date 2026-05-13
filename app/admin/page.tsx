@@ -207,9 +207,37 @@ function formatFeeModeSummary(registration: RegistrationRecord): string {
   )})`;
 }
 
+function registrationMatchesFeeStudentSearch(row: RegistrationRecord, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) {
+    return true;
+  }
+  if (row.name.toLowerCase().includes(q)) {
+    return true;
+  }
+  if ((row.reg_no || "").toLowerCase().includes(q)) {
+    return true;
+  }
+  if (row.whatsapp_number.toLowerCase().includes(q)) {
+    return true;
+  }
+  const queryDigits = q.replace(/\D/g, "");
+  if (queryDigits.length > 0) {
+    const phoneDigits = row.whatsapp_number.replace(/\D/g, "");
+    if (phoneDigits.includes(queryDigits)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } = {}) {
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState(
+    () => process.env.NEXT_PUBLIC_ADMIN_LOGIN_PREFILL_USER ?? "",
+  );
+  const [password, setPassword] = useState(
+    () => process.env.NEXT_PUBLIC_ADMIN_LOGIN_PREFILL_PASS ?? "",
+  );
   const [isInitializing, setIsInitializing] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -246,6 +274,12 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
   const [dmBrochurePage, setDmBrochurePage] = useState(1);
   const [notificationRequestedPage, setNotificationRequestedPage] = useState(1);
   const [feesPage, setFeesPage] = useState(1);
+  const [feeStudentSearchInput, setFeeStudentSearchInput] = useState("");
+  const [feeCourseFilter, setFeeCourseFilter] = useState<"all" | "HR" | "DM">("all");
+  const [feeBatchTypeFilter, setFeeBatchTypeFilter] = useState<"all" | "online" | "offline">("all");
+  const [feeReviewFilter, setFeeReviewFilter] = useState<"all" | "approved" | "under_review">("all");
+  const [feeBalanceFilter, setFeeBalanceFilter] = useState<"all" | "has_pending" | "cleared">("all");
+  const [feePlanFilter, setFeePlanFilter] = useState<"all" | "monthly_3x" | "one_time">("all");
   const [paymentRemindersPage, setPaymentRemindersPage] = useState(1);
   const [transactionsPage, setTransactionsPage] = useState(1);
   const [paymentHistoryPage, setPaymentHistoryPage] = useState(1);
@@ -1145,7 +1179,33 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
     1,
     Math.ceil(notificationRequestedUsers.length / notificationRequestsPageSize),
   );
-  const feesTotalPages = Math.max(1, Math.ceil(registrations.length / feeRowsPageSize));
+  const filteredFeeRegistrations = registrations.filter((row) => {
+    if (!registrationMatchesFeeStudentSearch(row, feeStudentSearchInput)) {
+      return false;
+    }
+    if (feeCourseFilter !== "all" && row.course_selected !== feeCourseFilter) {
+      return false;
+    }
+    const batchType = getRegistrationBatchType(row.reg_no);
+    if (feeBatchTypeFilter !== "all" && batchType !== feeBatchTypeFilter) {
+      return false;
+    }
+    if (feeReviewFilter !== "all" && row.review_status !== feeReviewFilter) {
+      return false;
+    }
+    const pending = row.pending_fee || 0;
+    if (feeBalanceFilter === "has_pending" && pending <= 0) {
+      return false;
+    }
+    if (feeBalanceFilter === "cleared" && pending > 0) {
+      return false;
+    }
+    if (feePlanFilter !== "all" && row.fee_plan !== feePlanFilter) {
+      return false;
+    }
+    return true;
+  });
+  const feesTotalPages = Math.max(1, Math.ceil(filteredFeeRegistrations.length / feeRowsPageSize));
   const remindersTotalPages = Math.max(1, Math.ceil(pendingReminderList.length / remindersPageSize));
   const transactionsTotalPages = Math.max(1, Math.ceil(transactions.length / transactionsPageSize));
   const paymentHistoryTotalPages = Math.max(
@@ -1165,7 +1225,7 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
     (notificationRequestedPage - 1) * notificationRequestsPageSize,
     notificationRequestedPage * notificationRequestsPageSize,
   );
-  const paginatedFeeRows = registrations.slice(
+  const paginatedFeeRows = filteredFeeRegistrations.slice(
     (feesPage - 1) * feeRowsPageSize,
     feesPage * feeRowsPageSize,
   );
@@ -1295,6 +1355,17 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
       setFeesPage(feesTotalPages);
     }
   }, [feesPage, feesTotalPages]);
+
+  useEffect(() => {
+    setFeesPage(1);
+  }, [
+    feeStudentSearchInput,
+    feeCourseFilter,
+    feeBatchTypeFilter,
+    feeReviewFilter,
+    feeBalanceFilter,
+    feePlanFilter,
+  ]);
 
   useEffect(() => {
     if (paymentRemindersPage > remindersTotalPages) {
@@ -2296,6 +2367,125 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                     </div>
                   </div>
 
+                  <div className="mb-4 space-y-3">
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <label className="flex flex-col gap-1 sm:col-span-2">
+                        <span className="text-sm font-medium text-slate-700">Find student</span>
+                        <input
+                          type="search"
+                          value={feeStudentSearchInput}
+                          onChange={(event) => setFeeStudentSearchInput(event.target.value)}
+                          placeholder="Name, reg no, or phone / WhatsApp"
+                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/30"
+                          autoComplete="off"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="text-sm font-medium text-slate-700">Course</span>
+                        <select
+                          value={feeCourseFilter}
+                          onChange={(event) =>
+                            setFeeCourseFilter(event.target.value as "all" | "HR" | "DM")
+                          }
+                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/30"
+                        >
+                          <option value="all">All courses</option>
+                          <option value="HR">HR</option>
+                          <option value="DM">DM</option>
+                        </select>
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="text-sm font-medium text-slate-700">Batch type</span>
+                        <select
+                          value={feeBatchTypeFilter}
+                          onChange={(event) =>
+                            setFeeBatchTypeFilter(event.target.value as "all" | "online" | "offline")
+                          }
+                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/30"
+                        >
+                          <option value="all">All batch types</option>
+                          <option value="online">Online</option>
+                          <option value="offline">Offline</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+                      <div className="grid flex-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:min-w-0">
+                        <label className="flex min-w-0 flex-col gap-1">
+                          <span className="text-sm font-medium text-slate-700">Review</span>
+                          <select
+                            value={feeReviewFilter}
+                            onChange={(event) =>
+                              setFeeReviewFilter(
+                                event.target.value as "all" | "approved" | "under_review",
+                              )
+                            }
+                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/30"
+                          >
+                            <option value="all">All reviews</option>
+                            <option value="approved">Approved</option>
+                            <option value="under_review">Under review</option>
+                          </select>
+                        </label>
+                        <label className="flex min-w-0 flex-col gap-1">
+                          <span className="text-sm font-medium text-slate-700">Balance</span>
+                          <select
+                            value={feeBalanceFilter}
+                            onChange={(event) =>
+                              setFeeBalanceFilter(
+                                event.target.value as "all" | "has_pending" | "cleared",
+                              )
+                            }
+                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/30"
+                          >
+                            <option value="all">Any balance</option>
+                            <option value="has_pending">Has pending</option>
+                            <option value="cleared">Fully paid</option>
+                          </select>
+                        </label>
+                        <label className="flex min-w-0 flex-col gap-1">
+                          <span className="text-sm font-medium text-slate-700">Fee plan</span>
+                          <select
+                            value={feePlanFilter}
+                            onChange={(event) =>
+                              setFeePlanFilter(
+                                event.target.value as "all" | "monthly_3x" | "one_time",
+                              )
+                            }
+                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 outline-none focus:ring-2 focus:ring-[#2b24ff]/30"
+                          >
+                            <option value="all">All plans</option>
+                            <option value="monthly_3x">Monthly (3×)</option>
+                            <option value="one_time">One-time</option>
+                          </select>
+                        </label>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFeeStudentSearchInput("");
+                            setFeeCourseFilter("all");
+                            setFeeBatchTypeFilter("all");
+                            setFeeReviewFilter("all");
+                            setFeeBalanceFilter("all");
+                            setFeePlanFilter("all");
+                          }}
+                          className="rounded-lg border border-slate-200 bg-white px-4 py-2 font-medium text-slate-700 transition hover:bg-slate-50"
+                        >
+                          Clear all filters
+                        </button>
+                        <p className="self-center text-sm text-slate-600 sm:whitespace-nowrap">
+                          Showing{" "}
+                          <span className="font-semibold text-slate-800">
+                            {filteredFeeRegistrations.length}
+                          </span>{" "}
+                          of {registrations.length}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="overflow-x-auto rounded-xl border border-slate-200">
                     <table className="min-w-full text-left text-sm">
                       <thead>
@@ -2351,6 +2541,14 @@ export default function FormsAdminPage({ forcedTab }: { forcedTab?: AdminTab } =
                           <tr>
                             <td colSpan={10} className="px-3 py-6 text-center text-slate-500">
                               No registrations found.
+                            </td>
+                          </tr>
+                        )}
+                        {registrations.length > 0 && filteredFeeRegistrations.length === 0 && (
+                          <tr>
+                            <td colSpan={10} className="px-3 py-6 text-center text-slate-500">
+                              No students match this search. Try another name, registration number, or phone
+                              number.
                             </td>
                           </tr>
                         )}

@@ -16,7 +16,17 @@ function imageRemoteHosts(): string[] {
   return [...hosts];
 }
 
+/** When TEST=true, expose super-admin login to the client bundle for local / e2e prefills only. */
+const adminLoginPrefillEnv: Record<string, string> =
+  process.env.TEST === "true"
+    ? {
+        NEXT_PUBLIC_ADMIN_LOGIN_PREFILL_USER: process.env.ADMIN_USERNAME ?? "",
+        NEXT_PUBLIC_ADMIN_LOGIN_PREFILL_PASS: process.env.ADMIN_PASSWORD ?? "",
+      }
+    : {};
+
 const nextConfig: NextConfig = {
+  env: adminLoginPrefillEnv,
   images: {
     remotePatterns: [
       ...imageRemoteHosts().map((hostname) => ({
